@@ -20,3 +20,21 @@ def reset_tracing(exporter):
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
     return exporter
+
+
+import pytest
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+
+
+@pytest.fixture
+def exporter():
+    exp = CollectingSpanExporter()
+    try:
+        trace.set_tracer_provider(TracerProvider())
+    except Exception:
+        pass
+    tp = trace.get_tracer_provider()
+    tp.add_span_processor(SimpleSpanProcessor(exp))
+    return exp
