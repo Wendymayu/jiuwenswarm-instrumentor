@@ -8,7 +8,12 @@ from jiuwenswarm_instrumentor.wrap import patch_method
 from opentelemetry.trace import StatusCode, SpanKind
 
 
-def instrument_tool(tracer, metrics, *, ability_cls=None):
+def _cap(text, max_len):
+    text = "" if text is None else str(text)
+    return text if len(text) <= max_len else text[: max_len - 3] + "..."
+
+
+def instrument_tool(tracer, metrics, *, log_messages=False, message_max_length=4096, ability_cls=None):
     """Wrap AbilityManager.execute_single (openjiuwen 0.1.10, ability_manager.py:635)."""
     if ability_cls is None:
         from openjiuwen.core.single_agent.ability_manager import AbilityManager
@@ -23,6 +28,8 @@ def instrument_tool(tracer, metrics, *, ability_cls=None):
                 A.GEN_AI_TOOL_CALL_ID: call_id,
             }
             attrs.update(current_request_attrs())
+            if log_messages:
+                attrs[A.GEN_AI_TOOL_ARGUMENTS] = _cap(getattr(tool_call, "arguments", ""), message_max_length)
             start = time.monotonic()
             with tracer.start_as_current_span("gen_ai.tool", kind=SpanKind.CLIENT, attributes=attrs) as span:
                 try:
@@ -33,6 +40,8 @@ def instrument_tool(tracer, metrics, *, ability_cls=None):
                         and getattr(tool_msg, "metadata", None)
                         and tool_msg.metadata.get("is_error")
                     )
+                    if log_messages and tool_msg is not None:
+                        span.set_attribute(A.GEN_AI_TOOL_RESULT, _cap(getattr(tool_msg, "content", ""), message_max_length))
                     span.set_status(StatusCode.ERROR if is_error else StatusCode.OK)
                     return result
                 except Exception as exc:

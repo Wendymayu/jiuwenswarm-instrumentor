@@ -1,5 +1,6 @@
 # src/jiuwenswarm_instrumentor/instrumentors/llm.py
 from __future__ import annotations
+import json
 import time
 import types
 
@@ -36,6 +37,85 @@ def _common_attrs(self, model, provider):
     return attrs
 
 
+def _msg_role(msg):
+    role = getattr(msg, "role", None)
+    if role is None and isinstance(msg, dict):
+        role = msg.get("role")
+    return role or "unknown"
+
+
+def _msg_content(msg):
+    content = getattr(msg, "content", None)
+    if content is None and isinstance(msg, dict):
+        content = msg.get("content", "")
+    return str(content) if content is not None else ""
+
+
+def _cap(text, max_len):
+    text = "" if text is None else str(text)
+    return text if len(text) <= max_len else text[: max_len - 3] + "..."
+
+
+def _tc_field(tc, name):
+    v = getattr(tc, name, None)
+    if v is None and isinstance(tc, dict):
+        v = tc.get(name)
+    return v
+
+
+def _record_input_messages(span, messages, max_len):
+    try:
+        entries = []
+        for m in messages:
+            entry = {"role": _msg_role(m),
+                     "parts": [{"type": "text", "content": _cap(_msg_content(m), max_len)}]}
+            if _msg_role(m) == "tool":
+                tcid = getattr(m, "tool_call_id", "")
+                if isinstance(m, dict):
+                    tcid = m.get("tool_call_id", "")
+                entry["tool_call_id"] = str(tcid)
+            entries.append(entry)
+        span.set_attribute(A.GEN_AI_INPUT_MESSAGES, json.dumps(entries, ensure_ascii=False))
+    except Exception:
+        pass
+
+
+def _record_output_message(span, content, tool_calls, max_len):
+    """Record assistant output. For tool-call responses (no text), record the tool_calls
+    so the model's tool selection is visible."""
+    try:
+        entry = {"role": "assistant", "parts": [{"type": "text", "content": _cap(content, max_len)}]}
+        if tool_calls:
+            tcs = []
+            for tc in tool_calls:
+                tcs.append({
+                    "id": str(_tc_field(tc, "id") or ""),
+                    "name": str(_tc_field(tc, "name") or ""),
+                    "arguments": _cap(_tc_field(tc, "arguments"), max_len),
+                })
+            entry["tool_calls"] = tcs
+        span.set_attribute(A.GEN_AI_OUTPUT_MESSAGES, json.dumps([entry], ensure_ascii=False))
+    except Exception:
+        pass
+
+
+def _record_tool_definitions(span, tools, max_len):
+    try:
+        if not tools:
+            return
+        defs = []
+        for t in tools:
+            name = _tc_field(t, "name")
+            desc = _tc_field(t, "description")
+            params = _tc_field(t, "parameters")
+            defs.append({"name": str(name or ""),
+                         "description": _cap(desc, max_len),
+                         "parameters": params})
+        span.set_attribute(A.GEN_AI_TOOL_DEFINITIONS, json.dumps(defs, ensure_ascii=False))
+    except Exception:
+        pass
+
+
 def _record_usage(span, metrics, result, model, provider):
     usage = getattr(result, "usage_metadata", None)
     if usage is None:
@@ -54,7 +134,7 @@ def _record_usage(span, metrics, result, model, provider):
     metrics.record_token_usage(inp, out, base)
 
 
-def instrument_llm(tracer, metrics, *, log_messages=False, model_client_cls=None):
+def instrument_llm(tracer, metrics, *, log_messages=False, message_max_length=4096, model_client_cls=None):
     """Wrap OpenAIModelClient.invoke + .stream (openjiuwen 0.1.10)."""
     if model_client_cls is None:
         from openjiuwen.core.foundation.llm.model_clients.openai_model_client import OpenAIModelClient
@@ -69,6 +149,9 @@ def instrument_llm(tracer, metrics, *, log_messages=False, model_client_cls=None
             attrs = _common_attrs(self, mdl, provider)
             start = time.monotonic()
             with tracer.start_as_current_span("gen_ai.chat", kind=SpanKind.CLIENT, attributes=attrs) as span:
+                if log_messages:
+                    _record_input_messages(span, messages, message_max_length)
+                    _record_tool_definitions(span, tools, message_max_length)
                 try:
                     result = await original(self, messages, tools=tools, temperature=temperature,
                                            top_p=top_p, model=model, max_tokens=max_tokens, stop=stop,
@@ -77,6 +160,9 @@ def instrument_llm(tracer, metrics, *, log_messages=False, model_client_cls=None
                     finish = getattr(result, "finish_reason", None)
                     if finish and str(finish) != "null":
                         span.set_attribute(A.GEN_AI_RESPONSE_FINISH_REASON, str(finish))
+                    if log_messages:
+                        _record_output_message(span, _msg_content(result),
+                                               getattr(result, "tool_calls", None), message_max_length)
                     span.set_status(StatusCode.OK)
                     return result
                 except Exception as exc:
@@ -98,9 +184,14 @@ def instrument_llm(tracer, metrics, *, log_messages=False, model_client_cls=None
             attrs[A.GEN_AI_REQUEST_STREAMING] = True
             start = time.monotonic()
             with tracer.start_as_current_span("gen_ai.chat", kind=SpanKind.CLIENT, attributes=attrs) as span:
+                if log_messages:
+                    _record_input_messages(span, messages, message_max_length)
+                    _record_tool_definitions(span, tools, message_max_length)
                 first = True
                 final_usage = None
                 finish = None
+                output_parts = []
+                tool_call_acc = {}  # index -> {id, name, arguments} (assembled from deltas)
                 try:
                     async for chunk in original(self, messages, tools=tools, temperature=temperature,
                                                 top_p=top_p, model=model, max_tokens=max_tokens, stop=stop,
@@ -114,12 +205,34 @@ def instrument_llm(tracer, metrics, *, log_messages=False, model_client_cls=None
                         fr = getattr(chunk, "finish_reason", None)
                         if fr and str(fr) != "null":
                             finish = fr
+                        if log_messages:
+                            c = _msg_content(chunk)
+                            if c:
+                                output_parts.append(c)
+                            tcs = getattr(chunk, "tool_calls", None)
+                            if tcs:
+                                for tc in tcs:
+                                    idx = _tc_field(tc, "index")
+                                    idx = idx if idx is not None else 0
+                                    acc = tool_call_acc.setdefault(idx, {"id": "", "name": "", "arguments": ""})
+                                    if _tc_field(tc, "id"):
+                                        acc["id"] = str(_tc_field(tc, "id"))
+                                    if _tc_field(tc, "name"):
+                                        acc["name"] += str(_tc_field(tc, "name"))
+                                    if _tc_field(tc, "arguments"):
+                                        acc["arguments"] += str(_tc_field(tc, "arguments"))
                         yield chunk
                     if final_usage is not None:
                         _record_usage(span, metrics,
                                      types.SimpleNamespace(usage_metadata=final_usage), mdl, provider)
                     if finish:
                         span.set_attribute(A.GEN_AI_RESPONSE_FINISH_REASON, finish)
+                    if log_messages:
+                        if output_parts:
+                            _record_output_message(span, "".join(output_parts), None, message_max_length)
+                        elif tool_call_acc:
+                            assembled = [tool_call_acc[k] for k in sorted(tool_call_acc)]
+                            _record_output_message(span, "", assembled, message_max_length)
                     span.set_status(StatusCode.OK)
                 except Exception as exc:
                     span.set_status(StatusCode.ERROR, str(exc)[:256])
