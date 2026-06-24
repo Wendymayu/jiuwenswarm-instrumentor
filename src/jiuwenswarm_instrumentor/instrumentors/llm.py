@@ -183,64 +183,69 @@ def instrument_llm(tracer, metrics, *, log_messages=False, message_max_length=40
             attrs = _common_attrs(self, mdl, provider)
             attrs[A.GEN_AI_REQUEST_STREAMING] = True
             start = time.monotonic()
-            with tracer.start_as_current_span("gen_ai.chat", kind=SpanKind.CLIENT, attributes=attrs) as span:
-                if log_messages:
-                    _record_input_messages(span, messages, message_max_length)
-                    _record_tool_definitions(span, tools, message_max_length)
-                first = True
-                final_usage = None
-                finish = None
-                output_parts = []
-                tool_call_acc = {}  # index -> {id, name, arguments} (assembled from deltas)
-                try:
-                    async for chunk in original(self, messages, tools=tools, temperature=temperature,
-                                                top_p=top_p, model=model, max_tokens=max_tokens, stop=stop,
-                                                output_parser=output_parser, timeout=timeout, **kw):
-                        if first:
-                            first = False
-                            span.set_attribute(A.GEN_AI_STREAMING_FIRST_TOKEN_MS, (time.monotonic() - start) * 1000)
-                        u = getattr(chunk, "usage_metadata", None)
-                        if u is not None:
-                            final_usage = u
-                        fr = getattr(chunk, "finish_reason", None)
-                        if fr and str(fr) != "null":
-                            finish = fr
-                        if log_messages:
-                            c = _msg_content(chunk)
-                            if c:
-                                output_parts.append(c)
-                            tcs = getattr(chunk, "tool_calls", None)
-                            if tcs:
-                                for tc in tcs:
-                                    idx = _tc_field(tc, "index")
-                                    idx = idx if idx is not None else 0
-                                    acc = tool_call_acc.setdefault(idx, {"id": "", "name": "", "arguments": ""})
-                                    if _tc_field(tc, "id"):
-                                        acc["id"] = str(_tc_field(tc, "id"))
-                                    if _tc_field(tc, "name"):
-                                        acc["name"] += str(_tc_field(tc, "name"))
-                                    if _tc_field(tc, "arguments"):
-                                        acc["arguments"] += str(_tc_field(tc, "arguments"))
-                        yield chunk
-                    if final_usage is not None:
-                        _record_usage(span, metrics,
-                                     types.SimpleNamespace(usage_metadata=final_usage), mdl, provider)
-                    if finish:
-                        span.set_attribute(A.GEN_AI_RESPONSE_FINISH_REASON, finish)
+            # NOT start_as_current_span: we don't keep this span current during the async
+            # iteration, so the caller's (agent's) mid-stream tool execution does NOT nest
+            # under gen_ai.chat. Per OTel GenAI convention, gen_ai.chat (model inference)
+            # and gen_ai.tool (tool execution) are siblings under the agent span.
+            span = tracer.start_span("gen_ai.chat", kind=SpanKind.CLIENT, attributes=attrs)
+            if log_messages:
+                _record_input_messages(span, messages, message_max_length)
+                _record_tool_definitions(span, tools, message_max_length)
+            first = True
+            final_usage = None
+            finish = None
+            output_parts = []
+            tool_call_acc = {}  # index -> {id, name, arguments} assembled from deltas
+            try:
+                async for chunk in original(self, messages, tools=tools, temperature=temperature,
+                                            top_p=top_p, model=model, max_tokens=max_tokens, stop=stop,
+                                            output_parser=output_parser, timeout=timeout, **kw):
+                    if first:
+                        first = False
+                        span.set_attribute(A.GEN_AI_STREAMING_FIRST_TOKEN_MS, (time.monotonic() - start) * 1000)
+                    u = getattr(chunk, "usage_metadata", None)
+                    if u is not None:
+                        final_usage = u
+                    fr = getattr(chunk, "finish_reason", None)
+                    if fr and str(fr) != "null":
+                        finish = fr
                     if log_messages:
-                        if output_parts:
-                            _record_output_message(span, "".join(output_parts), None, message_max_length)
-                        elif tool_call_acc:
-                            assembled = [tool_call_acc[k] for k in sorted(tool_call_acc)]
-                            _record_output_message(span, "", assembled, message_max_length)
-                    span.set_status(StatusCode.OK)
-                except Exception as exc:
-                    span.set_status(StatusCode.ERROR, str(exc)[:256])
-                    span.record_exception(exc)
-                    raise
-                finally:
-                    metrics.record_llm_duration(time.monotonic() - start,
-                                                {A.GEN_AI_REQUEST_MODEL: mdl, A.GEN_AI_SYSTEM: provider.lower()})
+                        c = _msg_content(chunk)
+                        if c:
+                            output_parts.append(c)
+                        tcs = getattr(chunk, "tool_calls", None)
+                        if tcs:
+                            for tc in tcs:
+                                idx = _tc_field(tc, "index")
+                                idx = idx if idx is not None else 0
+                                acc = tool_call_acc.setdefault(idx, {"id": "", "name": "", "arguments": ""})
+                                if _tc_field(tc, "id"):
+                                    acc["id"] = str(_tc_field(tc, "id"))
+                                if _tc_field(tc, "name"):
+                                    acc["name"] += str(_tc_field(tc, "name"))
+                                if _tc_field(tc, "arguments"):
+                                    acc["arguments"] += str(_tc_field(tc, "arguments"))
+                    yield chunk
+                if final_usage is not None:
+                    _record_usage(span, metrics,
+                                 types.SimpleNamespace(usage_metadata=final_usage), mdl, provider)
+                if finish:
+                    span.set_attribute(A.GEN_AI_RESPONSE_FINISH_REASON, finish)
+                if log_messages:
+                    if output_parts:
+                        _record_output_message(span, "".join(output_parts), None, message_max_length)
+                    elif tool_call_acc:
+                        assembled = [tool_call_acc[k] for k in sorted(tool_call_acc)]
+                        _record_output_message(span, "", assembled, message_max_length)
+                span.set_status(StatusCode.OK)
+            except Exception as exc:
+                span.set_status(StatusCode.ERROR, str(exc)[:256])
+                span.record_exception(exc)
+                raise
+            finally:
+                metrics.record_llm_duration(time.monotonic() - start,
+                                            {A.GEN_AI_REQUEST_MODEL: mdl, A.GEN_AI_SYSTEM: provider.lower()})
+                span.end()
         return traced_stream
 
     patch_method(model_client_cls, "invoke", invoke_factory)
