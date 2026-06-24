@@ -48,8 +48,12 @@ def main():
     if len(sys.argv) < 2:
         print("usage: jiuwen-instrument <module> [args...]", file=sys.stderr)
         sys.exit(2)
+    target = sys.argv[1]
     activate()
-    runpy.run_module(sys.argv[1], run_name="__main__", alter_sys=True)
+    # Strip the module name from argv so the target module sees only its own CLI args
+    # (mirrors `python -m <module> [args...]`, which run_module(alter_sys=True) expects).
+    sys.argv = [sys.argv[0]] + sys.argv[2:]
+    runpy.run_module(target, run_name="__main__", alter_sys=True)
 
 
 if __name__ == "__main__":
