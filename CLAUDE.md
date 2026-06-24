@@ -2,27 +2,48 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Purpose
+## Project
 
-**jiuwenswarm-instrumentor** is an observability data collector ("可观测数据采集器") for
-jiuwenswarm agents (智能体). The repository name (`-instrumentor`) indicates it will provide
-instrumentation that captures observability data from agents in the jiuwenswarm system.
+`jiuwenswarm-instrumentor` — a **standalone, self-contained OpenTelemetry auto-instrumentation** Python package that collects **traces + metrics** from `jiuwenclaw` / `openjiuwen` (the multi-channel AI agent) and exports them via **OTLP** to a standard observability backend (Arize Phoenix / Langfuse / self-hosted `labubu` — all speak the same OTLP, only the endpoint differs).
 
-> Source: `README.md` — the only authoritative description available.
+## Hard constraint
 
-## Current State
+**Never depend on `jiuwenclaw/telemetry/` or any of its extension points** (`TelemetryProviderExtension`, `ExtensionRegistry` telemetry hook, `TelemetryRail`). That in-tree module is slated for deletion. This package re-implements instrumentation from scratch and must keep working after the old module is removed.
 
-This repository is in its initial state. As of this writing it contains **no source code,
-build system, dependency manifests, tests, or configuration files** — only `README.md`.
+## Commands
 
-Because there is no code yet:
+> The machine's default `python`/`pip` is **3.14**, which this package's `requires-python = ">=3.11,<3.14"` **rejects**. Always use **Python 3.13** via the `py` launcher.
 
-- There are **no build, lint, or test commands** to document. Do not invent them.
-  Once a language/toolchain is chosen (e.g. Go, Python, Rust, Node), add the
-  corresponding commands here.
-- There is **no architecture** to describe yet. Add an architecture overview once
-  the first modules exist.
+```bash
+py -3.13 -m pip install -e ".[test]"   # editable install + test deps
+py -3.13 -m pytest                     # full suite (22 tests)
+py -3.13 -m pytest tests/instrumentors/test_llm.py -v   # one file
+py -3.13 -m pytest tests/instrumentors/test_llm.py::test_invoke_creates_genai_span -v  # one test
+```
 
-When this changes, update this file with: the chosen toolchain, build/test/lint
-commands, how to run a single test, and a high-level architecture summary that
-spans more than one file.
+The `jiuwen-instrument` console script (and `python -m jiuwenswarm_instrumentor.activate`) is the CLI wrapper entry point.
+
+## Architecture
+
+In-process auto-instrumentation (no `jiuwenclaw` source edits). At activation (`activate.activate()` / `setup()` / `jiuwen-instrument <module>`) a self-contained OTel stack is installed and four core surfaces are monkey-patched via `wrap.patch_method` (idempotent + fail-soft):
+
+| Surface | Target (openjiuwen 0.1.10 / jiuwenclaw enterprise_dev) | Span |
+|---|---|---|
+| LLM | `OpenAIModelClient.invoke` + `.stream` | `gen_ai.chat` (+ token usage, TTFT) |
+| Tool | `AbilityManager.execute_single` | `gen_ai.tool` |
+| Agent | `ReActAgent.invoke` | `jiuwenclaw.agent.invoke` |
+| Session | `JiuWenClaw.create_instance` / `.cleanup` | `jiuwenclaw.session.create` / `.end` |
+
+Data flow: patched method → `opentelemetry` SDK (`gen_ai.*` + `jiuwenclaw.*` attributes) → OTLP exporter (gRPC/HTTP) → backend. Config is env-driven (`OTEL_*`, see `config.py`); `OTEL_ENABLED=false` (default) is a zero-cost no-op.
+
+### Metaclass caveat
+`openjiuwen`'s `BaseAgent` metaclass rebinds `invoke` as a per-instance attribute at construction. Instrumentation **must be applied before any agent instance is built** — activation runs at process start, before `jiuwenclaw` constructs agents.
+
+### Testing approach
+Instrumentors take `tracer`/`metrics`/target-class as injected params (e.g. `instrument_llm(tracer, metrics, *, model_client_cls=Fake)`), so unit tests use **fake classes** + a dependency-free `CollectingSpanExporter` (in `tests/conftest.py`) — no real `openjiuwen`/`jiuwenclaw` or LLM calls needed. The real classes are imported lazily only when the param is `None` (production path).
+
+## Layout
+
+`src/jiuwenswarm_instrumentor/`: `config`, `attributes`, `metrics`, `context` (ContextVar propagation), `provider` (OTel providers + OTLP), `wrap` (`patch_method`), `activate` (CLI + `setup()`), `instrumentors/{llm,tool,agent,session}.py` + `instrumentors/__init__.py` (`apply_instrumentors`). `tests/` mirrors this.
+
+Design spec: `docs/superpowers/specs/2026-06-24-jiuwenswarm-instrumentor-design.md`. Implementation plan: `docs/superpowers/plans/2026-06-24-jiuwenswarm-instrumentor.md`.
