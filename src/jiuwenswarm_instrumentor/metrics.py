@@ -33,6 +33,18 @@ class Metrics:
             "gen_ai.agent.duration", unit="s",
             description="Agent invocation duration in seconds",
         )
+        self._skill_call_count = meter.create_counter(
+            "gen_ai.skill.call.count", unit="{call}",
+            description="Skill activation count (skill_tool)",
+        )
+        self._skill_duration = meter.create_histogram(
+            "gen_ai.skill.duration", unit="s",
+            description="Skill execution duration (load→release)",
+        )
+        self._skill_error_count = meter.create_counter(
+            "gen_ai.skill.error.count", unit="{call}",
+            description="Skill execution error count",
+        )
 
     def record_token_usage(self, input_tokens, output_tokens, attrs):
         try:
@@ -60,3 +72,21 @@ class Metrics:
             self._agent_duration.record(seconds, attrs)
         except Exception:
             logger.debug("[instrumentor] agent metric failed", exc_info=True)
+
+    def record_skill_call(self, attrs):
+        try:
+            self._skill_call_count.add(1, attrs)
+        except Exception:
+            logger.debug("[instrumentor] skill call metric failed", exc_info=True)
+
+    def record_skill_duration(self, seconds, attrs):
+        try:
+            self._skill_duration.record(seconds, attrs)
+        except Exception:
+            logger.debug("[instrumentor] skill duration metric failed", exc_info=True)
+
+    def record_skill_error(self, attrs):
+        try:
+            self._skill_error_count.add(1, attrs)
+        except Exception:
+            logger.debug("[instrumentor] skill error metric failed", exc_info=True)
