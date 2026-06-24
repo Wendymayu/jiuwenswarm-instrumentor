@@ -11,3 +11,9 @@ def test_gen_ai_constants():
 def test_jiuwenclaw_constants():
     assert A.JIUWENCLAW_SESSION_ID == "jiuwenclaw.session.id"
     assert A.JIUWENCLAW_CHANNEL_ID == "jiuwenclaw.channel.id"
+
+
+def test_skill_constants():
+    from jiuwenswarm_instrumentor import attributes as A
+    assert A.GEN_AI_SKILL_NAME == "gen_ai.skill.name"
+    assert A.GEN_AI_SKILL_ID == "gen_ai.skill.id"
