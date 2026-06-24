@@ -1,0 +1,56 @@
+# src/jiuwenswarm_instrumentor/activate.py
+from __future__ import annotations
+import logging
+import runpy
+import sys
+
+from opentelemetry import trace, metrics
+
+from jiuwenswarm_instrumentor.config import load_config
+from jiuwenswarm_instrumentor.provider import init_providers
+from jiuwenswarm_instrumentor.instrumentors import apply_instrumentors
+
+logger = logging.getLogger("jiuwenswarm_instrumentor")
+_APPLIED = False
+
+
+def activate() -> bool:
+    """Read config, install providers, apply instrumentors. Idempotent + fail-soft.
+    Returns True if instrumentation is active, False if disabled."""
+    global _APPLIED
+    if _APPLIED:
+        return True
+    cfg = load_config()
+    if not cfg.enabled:
+        logger.info("[instrumentor] OTEL_ENABLED not set — instrumentation disabled")
+        return False
+    try:
+        init_providers(cfg)
+        apply_instrumentors(trace.get_tracer("jiuwenswarm_instrumentor"),
+                            metrics.get_meter("jiuwenswarm_instrumentor"), cfg)
+        _APPLIED = True
+        logger.info("[instrumentor] active: traces=%s metrics=%s endpoint=%s",
+                    cfg.traces_exporter, cfg.metrics_exporter, cfg.traces_endpoint)
+        return True
+    except Exception:
+        logger.exception("[instrumentor] activation failed — running without instrumentation")
+        return False
+
+
+def main():
+    """CLI entry point: `jiuwen-instrument <module> [args...]`.
+
+    Activates instrumentation, then runs the target module as __main__. Must run
+    BEFORE jiuwenclaw/openjiuwen construct agent instances (openjiuwen agent metaclass
+    rebinds invoke at construction time).
+    """
+    logging.basicConfig(level=logging.INFO)
+    if len(sys.argv) < 2:
+        print("usage: jiuwen-instrument <module> [args...]", file=sys.stderr)
+        sys.exit(2)
+    activate()
+    runpy.run_module(sys.argv[1], run_name="__main__", alter_sys=True)
+
+
+if __name__ == "__main__":
+    main()
