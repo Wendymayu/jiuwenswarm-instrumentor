@@ -1,6 +1,8 @@
+# tests/instrumentors/test_llm.py
 from unittest.mock import Mock
-
+import pytest
 from opentelemetry import trace
+from opentelemetry.trace import StatusCode
 
 from jiuwenswarm_instrumentor.instrumentors.llm import instrument_llm
 from jiuwenswarm_instrumentor.metrics import Metrics
@@ -81,3 +83,23 @@ async def test_stream_creates_span_with_ttft_and_final_usage(exporter):
     assert "gen_ai.streaming.first_token_ms" in span.attributes
     assert span.attributes["gen_ai.usage.input_tokens"] == 5
     assert span.attributes["gen_ai.usage.output_tokens"] == 3
+
+
+async def test_invoke_exception_sets_error_and_reraises(exporter):
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+
+    class _ErrClient:
+        class model_config:
+            model_name = "gpt-x"; temperature = 0.7; top_p = None
+        class model_client_config:
+            client_provider = "OpenAI"
+        async def invoke(self, messages, **kw):
+            raise RuntimeError("boom")
+
+    instrument_llm(tracer, metrics, log_messages=False, model_client_cls=_ErrClient)
+    with pytest.raises(RuntimeError):
+        await _ErrClient().invoke([{"role": "user", "content": "hi"}])
+    span = exporter.spans[0]
+    assert span.name == "gen_ai.chat"
+    assert span.status.status_code == StatusCode.ERROR

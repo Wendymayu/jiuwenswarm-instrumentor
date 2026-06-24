@@ -49,16 +49,17 @@ def _headers(key):
 def load_config() -> InstrumentorConfig:
     protocol = _lower("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
     endpoint = _str("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
+    base_headers = _headers("OTEL_EXPORTER_OTLP_HEADERS")
     return InstrumentorConfig(
         enabled=_bool("OTEL_ENABLED", False),
         traces_exporter=_lower("OTEL_TRACES_EXPORTER", "none"),
         traces_endpoint=_str("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", endpoint),
         traces_protocol=_lower("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", protocol),
-        traces_headers=_headers("OTEL_EXPORTER_OTLP_TRACES_HEADERS"),
+        traces_headers={**base_headers, **_headers("OTEL_EXPORTER_OTLP_TRACES_HEADERS")},
         metrics_exporter=_lower("OTEL_METRICS_EXPORTER", "none"),
         metrics_endpoint=_str("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", endpoint),
         metrics_protocol=_lower("OTEL_EXPORTER_OTLP_METRICS_PROTOCOL", protocol),
-        metrics_headers=_headers("OTEL_EXPORTER_OTLP_METRICS_HEADERS"),
+        metrics_headers={**base_headers, **_headers("OTEL_EXPORTER_OTLP_METRICS_HEADERS")},
         protocol=protocol,
         service_name=_str("OTEL_SERVICE_NAME", "jiuwenclaw"),
         log_messages=_bool("OTEL_LOG_MESSAGES", False),

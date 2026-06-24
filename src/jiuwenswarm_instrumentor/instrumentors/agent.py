@@ -54,9 +54,10 @@ def instrument_agent(tracer, metrics, *, agent_cls=None):
                         span.record_exception(exc)
                         raise
             finally:
+                # reset context first (guaranteed), then record (fail-soft in Metrics)
+                ctx_token.reset()
                 metrics.record_agent_duration(time.monotonic() - start,
                                                {A.GEN_AI_AGENT_NAME: agent_name})
-                ctx_token.reset()
         return traced
 
     patch_method(agent_cls, "invoke", factory)

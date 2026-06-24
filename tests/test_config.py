@@ -35,3 +35,16 @@ def test_env_overrides():
     assert cfg.traces_protocol == "http"
     assert cfg.service_name == "jiuwenclaw-prod"
     assert cfg.log_messages is False
+
+
+def test_generic_headers_with_signal_overlay():
+    os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = "Authorization=Bearer secret,Common=val"
+    os.environ["OTEL_EXPORTER_OTLP_TRACES_HEADERS"] = "X-Trace=1"
+    try:
+        cfg = load_config()
+    finally:
+        del os.environ["OTEL_EXPORTER_OTLP_HEADERS"]
+        del os.environ["OTEL_EXPORTER_OTLP_TRACES_HEADERS"]
+    # generic headers are the base; signal-specific overlay on top
+    assert cfg.traces_headers == {"Authorization": "Bearer secret", "Common": "val", "X-Trace": "1"}
+    assert cfg.metrics_headers == {"Authorization": "Bearer secret", "Common": "val"}
