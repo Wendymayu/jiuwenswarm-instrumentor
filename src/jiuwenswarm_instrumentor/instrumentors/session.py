@@ -45,6 +45,12 @@ def instrument_session(tracer, metrics, *, jiuwenclaw_cls=None):
                     span.set_status(StatusCode.ERROR, str(exc)[:256])
                     span.record_exception(exc)
                     raise
+                finally:
+                    try:
+                        from jiuwenswarm_instrumentor.instrumentors import skill as skill_state
+                        skill_state.clear_session(sid or "")
+                    except Exception:
+                        pass
         return traced
 
     patch_method(jiuwenclaw_cls, "create_instance", create_factory)

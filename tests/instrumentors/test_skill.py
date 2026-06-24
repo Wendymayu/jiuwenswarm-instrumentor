@@ -100,3 +100,21 @@ async def test_skill_complete_release_enriches_span_and_duration(exporter):
     assert release_span.attributes["gen_ai.skill.name"] == "data_analysis"
     assert any(e.name == "skill.released" for e in release_span.events)
     metrics.record_skill_duration.assert_called_once()
+
+
+async def test_session_cleanup_clears_skill_state(exporter):
+    from jiuwenswarm_instrumentor.instrumentors.session import instrument_session
+    from opentelemetry import trace
+    tracer = trace.get_tracer("t")
+    metrics = Mock()
+    skill.clear_session("sess-9")
+    skill.record_load("sess-9", "orphan_skill")  # loaded, never released
+
+    class _FakeJW:
+        _session_id = "sess-9"
+        async def cleanup(self):
+            pass
+    instrument_session(tracer, metrics, jiuwenclaw_cls=_FakeJW)
+    await _FakeJW().cleanup()
+    # orphan must be cleared by session cleanup
+    assert skill.pop_release("sess-9", "orphan_skill") is None
