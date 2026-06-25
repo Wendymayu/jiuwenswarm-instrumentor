@@ -18,12 +18,15 @@ class FakeAgentClient:
 
 
 class FakeMessageHandler:
+    """Real MessageHandler.process_stream is a COROUTINE (caller passes it to
+    asyncio.create_task), not an async generator — so the fake matches that."""
     def __init__(self, ac=None):
         self._ac = ac or FakeAgentClient()
 
     async def process_stream(self, *args, **kw):
-        async for c in self._ac.send_request_stream(FakeEnvelope({})):
-            yield c
+        async for _c in self._ac.send_request_stream(FakeEnvelope({})):
+            pass  # consume the stream
+        return "done"
 
 
 async def test_send_request_injects_traceparent(exporter):
@@ -63,8 +66,8 @@ async def test_process_stream_creates_channel_request_span(exporter):
     tracer = trace.get_tracer("t")
     instrument_gateway(tracer, message_handler_cls=FakeMessageHandler, agent_client_cls=FakeAgentClient)
     mh = FakeMessageHandler()
-    chunks = [c async for c in mh.process_stream()]
-    assert chunks == ["chunk1", "chunk2"]
+    result = await mh.process_stream()  # process_stream is a coroutine, not an async gen
+    assert result == "done"
     spans = [s for s in exporter.spans if s.name == "channel.request"]
     assert len(spans) == 1
 
@@ -73,7 +76,7 @@ async def test_channel_request_is_parent_of_client(exporter):
     tracer = trace.get_tracer("t")
     instrument_gateway(tracer, message_handler_cls=FakeMessageHandler, agent_client_cls=FakeAgentClient)
     mh = FakeMessageHandler()
-    _ = [c async for c in mh.process_stream()]
+    await mh.process_stream()
     cr = next(s for s in exporter.spans if s.name == "channel.request")
     cl = next(s for s in exporter.spans if s.name == "jiuwenclaw.gateway.agent.request")
     assert cl.parent is not None

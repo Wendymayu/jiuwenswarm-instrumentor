@@ -83,8 +83,7 @@ def instrument_gateway(tracer, *, message_handler_cls=None, agent_client_cls=Non
             async def traced(self, *args, **kw):
                 attrs = _process_attrs(args, kw)
                 with tracer.start_as_current_span("channel.request", kind=SpanKind.INTERNAL, attributes=attrs):
-                    async for chunk in original(self, *args, **kw):
-                        yield chunk
+                    return await original(self, *args, **kw)
             return traced
 
         patch_method(message_handler_cls, "process_message", factory_process)
