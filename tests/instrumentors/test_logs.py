@@ -207,3 +207,56 @@ def test_setup_logger_clear_only_keeps_info(otel_logger, clean_jiuwenclaw_logger
     assert len(ours) == 1
     assert ours[0].level == logging.INFO  # NOT downgraded (handler retains filters)
     assert any(isinstance(f, RedactFilter) for f in ours[0].filters)
+
+
+def test_setup_logger_at_import_time_reattaches(otel_logger, clean_jiuwenclaw_logger, monkeypatch):
+    """Regression: jiuwenclaw.utils calls setup_logger() at module import time
+    (utils.py:2821), which runs UNWRAPPED during `import jiuwenclaw.utils` inside
+    _patch_setup_logger_to_reattach (the patch installs only after the import returns).
+    instrument_logs must re-attach our handler after that import-time clear."""
+    import importlib.abc, importlib.machinery
+    lp_logger, exporter = otel_logger
+    jl = logging.getLogger("jiuwenclaw")
+    class RedactFilter(logging.Filter):
+        def filter(self, record):
+            return True
+
+    def fake_setup_logger():
+        jl.handlers = []
+        app_h = logging.StreamHandler()
+        app_h.addFilter(RedactFilter())
+        jl.addHandler(app_h)
+
+    class _Loader(importlib.abc.Loader):
+        def create_module(self, spec):
+            return None
+        def exec_module(self, module):
+            if module.__name__ == "jiuwenclaw":
+                module.__path__ = []  # package marker
+                return
+            module.setup_logger = fake_setup_logger
+            fake_setup_logger()  # module-bottom import-time call (unwrapped)
+
+    class _Finder(importlib.abc.MetaPathFinder):
+        def find_spec(self, fullname, path, target=None):
+            if fullname == "jiuwenclaw":
+                spec = importlib.machinery.ModuleSpec("jiuwenclaw", _Loader(), is_package=True)
+                spec.submodule_search_locations = []
+                return spec
+            if fullname == "jiuwenclaw.utils":
+                return importlib.machinery.ModuleSpec("jiuwenclaw.utils", _Loader())
+            return None
+
+    monkeypatch.delitem(sys.modules, "jiuwenclaw", raising=False)
+    monkeypatch.delitem(sys.modules, "jiuwenclaw.utils", raising=False)
+    finder = _Finder()
+    sys.meta_path.insert(0, finder)
+    try:
+        instrument_logs(otel_logger=lp_logger, level="INFO")
+    finally:
+        sys.meta_path.remove(finder)
+
+    ours = [h for h in jl.handlers if getattr(h, "_jiuwenswarm_otel", False)]
+    assert len(ours) == 1  # survived the import-time clear
+    assert ours[0].level == logging.INFO  # app filter present -> INFO (not WARNING fallback)
+    assert any(isinstance(f, RedactFilter) for f in ours[0].filters)  # redaction piggybacked

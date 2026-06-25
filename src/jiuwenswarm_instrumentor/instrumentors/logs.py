@@ -205,3 +205,4 @@ def instrument_logs(otel_logger=None, *, level="INFO", excluded_loggers=(), mess
 
     attach()
     _patch_setup_logger_to_reattach(attach)
+    attach()  # re-attach after import-time setup_logger cleared handlers
