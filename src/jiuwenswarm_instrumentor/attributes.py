@@ -28,6 +28,13 @@ GEN_AI_SKILL_ID = "gen_ai.skill.id"
 GEN_AI_AGENT_NAME = "gen_ai.agent.name"
 GEN_AI_CONVERSATION_ID = "gen_ai.conversation.id"
 GEN_AI_STREAMING_FIRST_TOKEN_MS = "gen_ai.streaming.first_token_ms"
+GEN_AI_CONTEXT_SKILL = "gen_ai.context.skill"
+GEN_AI_CONTEXT_SYSTEM_PROMPT = "gen_ai.context.system_prompt"
+GEN_AI_CONTEXT_USER_MESSAGES = "gen_ai.context.user_messages"
+GEN_AI_CONTEXT_ASSISTANT_MESSAGES = "gen_ai.context.assistant_messages"
+GEN_AI_CONTEXT_TOOL_RESULTS = "gen_ai.context.tool_results"
+GEN_AI_CONTEXT_TOOL_DEFINITIONS = "gen_ai.context.tool_definitions"
+GEN_AI_USAGE_ESTIMATED = "gen_ai.usage.estimated"
 
 # jiuwenclaw custom dimensions
 JIUWENCLAW_SESSION_ID = "jiuwenclaw.session.id"

@@ -45,6 +45,14 @@ class Metrics:
             "gen_ai.skill.error.count", unit="{call}",
             description="Skill execution error count",
         )
+        self._skill_token_usage = meter.create_counter(
+            "gen_ai.skill.token.usage", unit="{token}",
+            description="Skill content tokens in context (body+pin), by skill",
+        )
+        self._tool_token_usage = meter.create_counter(
+            "gen_ai.tool.token.usage", unit="{token}",
+            description="Tool-definition tokens in context, by tool",
+        )
 
     def record_token_usage(self, input_tokens, output_tokens, attrs):
         try:
@@ -90,3 +98,15 @@ class Metrics:
             self._skill_error_count.add(1, attrs)
         except Exception:
             logger.debug("[instrumentor] skill error metric failed", exc_info=True)
+
+    def record_skill_token_usage(self, tokens, attrs):
+        try:
+            self._skill_token_usage.add(int(tokens or 0), attrs)
+        except Exception:
+            logger.debug("[instrumentor] skill token usage metric failed", exc_info=True)
+
+    def record_tool_token_usage(self, tokens, attrs):
+        try:
+            self._tool_token_usage.add(int(tokens or 0), attrs)
+        except Exception:
+            logger.debug("[instrumentor] tool token usage metric failed", exc_info=True)
