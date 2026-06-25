@@ -2,11 +2,16 @@ from __future__ import annotations
 import logging
 
 from opentelemetry import trace, metrics
+import opentelemetry._logs as logs
 from opentelemetry.sdk.resources import Resource, SERVICE_NAME
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter, SimpleSpanProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader, ConsoleMetricExporter
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs.export import (
+    BatchLogRecordProcessor, SimpleLogRecordProcessor, ConsoleLogExporter,
+)
 
 from jiuwenswarm_instrumentor.config import InstrumentorConfig
 
@@ -23,6 +28,7 @@ def init_providers(cfg: InstrumentorConfig):
         tp = TracerProvider(resource=resource)
         mp = MeterProvider(resource=resource, metric_readers=_metric_readers(cfg))
         _attach_traces(tp, cfg)
+        _attach_logs(resource, cfg)
         try:
             trace.set_tracer_provider(tp)
         except Exception:
@@ -67,3 +73,28 @@ def _otlp_metric_exporter(cfg):
         return OTLPMetricExporter(endpoint=f"{cfg.metrics_endpoint}/v1/metrics", headers=cfg.metrics_headers)
     from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
     return OTLPMetricExporter(endpoint=cfg.metrics_endpoint, headers=cfg.metrics_headers)
+
+
+def _attach_logs(resource, cfg):
+    if getattr(cfg, "logs_exporter", "none") == "none":
+        return
+    try:
+        lp = LoggerProvider(resource=resource)
+        if cfg.logs_exporter == "otlp":
+            lp.add_log_record_processor(BatchLogRecordProcessor(_otlp_log_exporter(cfg)))
+        elif cfg.logs_exporter == "console":
+            lp.add_log_record_processor(SimpleLogRecordProcessor(ConsoleLogExporter()))
+        try:
+            logs.set_logger_provider(lp)
+        except Exception:
+            pass  # already set in-process
+    except Exception:
+        logger.debug("[instrumentor] logs provider init failed", exc_info=True)
+
+
+def _otlp_log_exporter(cfg):
+    if cfg.logs_protocol == "http":
+        from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+        return OTLPLogExporter(endpoint=f"{cfg.logs_endpoint}/v1/logs", headers=cfg.logs_headers)
+    from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+    return OTLPLogExporter(endpoint=cfg.logs_endpoint, headers=cfg.logs_headers)

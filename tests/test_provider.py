@@ -17,3 +17,17 @@ def test_otlp_http_builds_providers(monkeypatch):
     )
     tp, mp = provider.init_providers(cfg)
     assert tp is not None and mp is not None
+
+
+def test_logs_console_sets_logger_provider(monkeypatch):
+    monkeypatch.setattr(provider.trace, "set_tracer_provider", lambda p: None)
+    monkeypatch.setattr(provider.metrics, "set_meter_provider", lambda p: None)
+    captured = []
+    monkeypatch.setattr(provider.logs, "set_logger_provider", lambda p: captured.append(p))
+    cfg = InstrumentorConfig(enabled=True, logs_exporter="console", service_name="jc")
+    tp, mp = provider.init_providers(cfg)
+    assert tp is not None and mp is not None
+    assert len(captured) == 1
+    from opentelemetry.sdk._logs import LoggerProvider
+    assert isinstance(captured[0], LoggerProvider)
+    assert captured[0].resource.attributes.get("service.name") == "jc"
