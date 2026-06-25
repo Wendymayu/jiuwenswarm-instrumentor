@@ -48,3 +48,32 @@ def test_generic_headers_with_signal_overlay():
     # generic headers are the base; signal-specific overlay on top
     assert cfg.traces_headers == {"Authorization": "Bearer secret", "Common": "val", "X-Trace": "1"}
     assert cfg.metrics_headers == {"Authorization": "Bearer secret", "Common": "val"}
+
+
+def test_logs_config_defaults():
+    cfg = load_config()
+    assert cfg.logs_exporter == "none"
+    assert cfg.logs_protocol == "grpc"
+    assert cfg.log_level == "INFO"
+    assert cfg.log_excluded_loggers == ("jiuwenclaw.interface.resp",)
+    assert cfg.log_message_max_length == 8192
+
+
+def test_logs_env_overrides():
+    os.environ["OTEL_LOGS_EXPORTER"] = "otlp"
+    os.environ["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"] = "http"
+    os.environ["OTEL_LOGS_LEVEL"] = "debug"
+    os.environ["OTEL_LOGS_EXCLUDED_LOGGERS"] = "a,b"
+    os.environ["OTEL_LOG_MESSAGE_MAX_LENGTH"] = "100"
+    try:
+        cfg = load_config()
+    finally:
+        for k in ("OTEL_LOGS_EXPORTER", "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL",
+                  "OTEL_LOGS_LEVEL", "OTEL_LOGS_EXCLUDED_LOGGERS",
+                  "OTEL_LOG_MESSAGE_MAX_LENGTH"):
+            del os.environ[k]
+    assert cfg.logs_exporter == "otlp"
+    assert cfg.logs_protocol == "http"
+    assert cfg.log_level == "DEBUG"
+    assert cfg.log_excluded_loggers == ("a", "b")
+    assert cfg.log_message_max_length == 100

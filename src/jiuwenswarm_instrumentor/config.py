@@ -18,6 +18,13 @@ class InstrumentorConfig:
     service_name: str = "jiuwenclaw"
     log_messages: bool = False           # opt-in full prompt/response capture
     message_max_length: int = 4096
+    logs_exporter: str = "none"          # otlp | console | none
+    logs_endpoint: str = "http://localhost:4317"
+    logs_protocol: str = "grpc"          # grpc | http
+    logs_headers: dict = None
+    log_level: str = "INFO"              # NOTSET|DEBUG|INFO|WARNING|ERROR|CRITICAL
+    log_excluded_loggers: tuple = ()
+    log_message_max_length: int = 8192
 
 
 def _str(key, default):
@@ -64,4 +71,13 @@ def load_config() -> InstrumentorConfig:
         service_name=_str("OTEL_SERVICE_NAME", "jiuwenclaw"),
         log_messages=_bool("OTEL_LOG_MESSAGES", False),
         message_max_length=int(_str("OTEL_MESSAGE_CONTENT_MAX_LENGTH", "4096") or 4096),
+        logs_exporter=_lower("OTEL_LOGS_EXPORTER", "none"),
+        logs_endpoint=_str("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", endpoint),
+        logs_protocol=_lower("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", protocol),
+        logs_headers={**base_headers, **_headers("OTEL_EXPORTER_OTLP_LOGS_HEADERS")},
+        log_level=(_str("OTEL_LOGS_LEVEL", "") or _str("OTEL_LOG_LEVEL", "INFO")).upper() or "INFO",
+        log_excluded_loggers=tuple(
+            s.strip() for s in _str("OTEL_LOGS_EXCLUDED_LOGGERS", "jiuwenclaw.interface.resp").split(",") if s.strip()
+        ),
+        log_message_max_length=int(_str("OTEL_LOG_MESSAGE_MAX_LENGTH", "8192") or 8192),
     )
