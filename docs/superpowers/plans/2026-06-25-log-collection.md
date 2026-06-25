@@ -767,7 +767,7 @@ logging.getLogger('jiuwenclaw').info('hello from smoke')
 logging.getLogger('jiuwenclaw').warning('warn line')
 "
 ```
-Expected: 控制台输出两条 `LogRecord`(JSON),severity 分别 INFO / WARN,body 正确。
+Expected: 控制台输出 `LogRecord`(JSON),severity/body 正确。注:在 instrumentor 自己的测试环境(jiuwenclaw 未安装 → 无 `SensitiveDataFilter` → WARNING 回退)下,INFO 会被丢弃,只输出 WARN 一条;在真实 jiuwenswarm 环境(jiuwenclaw 已装、有脱敏 filter)下,INFO + WARN 两条都会输出。
 
 - [ ] **Step 4: 提交**
 
