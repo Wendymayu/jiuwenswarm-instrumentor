@@ -63,6 +63,8 @@ async def test_invoke_creates_genai_span(exporter):
     assert span.attributes["gen_ai.usage.input_tokens"] == 12
     assert span.attributes["gen_ai.usage.output_tokens"] == 8
     assert span.attributes["jiuwenclaw.session.id"] == "s1"
+    assert span.attributes["gen_ai.usage.estimated"] is True
+    assert "gen_ai.context.user_messages" in span.attributes
 
 
 async def test_stream_creates_span_with_ttft_and_final_usage(exporter):
@@ -83,6 +85,8 @@ async def test_stream_creates_span_with_ttft_and_final_usage(exporter):
     assert "gen_ai.streaming.first_token_ms" in span.attributes
     assert span.attributes["gen_ai.usage.input_tokens"] == 5
     assert span.attributes["gen_ai.usage.output_tokens"] == 3
+    assert span.attributes["gen_ai.usage.estimated"] is True
+    assert "gen_ai.context.user_messages" in span.attributes
 
 
 async def test_invoke_exception_sets_error_and_reraises(exporter):
