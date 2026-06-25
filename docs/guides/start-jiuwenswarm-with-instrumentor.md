@@ -54,6 +54,9 @@ export OTEL_EXPORTER_OTLP_PROTOCOL=http
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # labubu / Phoenix / Langfuse
 export OTEL_SERVICE_NAME=jiuwenclaw
 export OTEL_LOG_MESSAGES=true   # 记录完整 prompt/response + tool 参数/结果(隐私敏感,生产可关)
+export OTEL_LOGS_EXPORTER=otlp              # 采集 jiuwenclaw stdlib 日志
+export OTEL_LOGS_LEVEL=INFO                 # 采集级别 (DEBUG 会爆量)
+# 可选: export OTEL_LOGS_EXCLUDED_LOGGERS=jiuwenclaw.interface.resp
 ```
 
 ### 2.2 AgentServer(终端 1,被插桩)
@@ -99,6 +102,12 @@ npm run dev   # vite,默认 :5173
 
 `gen_ai.client.token.usage`、`gen_ai.client.operation.duration`、`gen_ai.tool.count`/`duration`、`gen_ai.agent.duration`、`gen_ai.skill.call.count`/`duration`/`error.count`。
 
+### logs(新)
+
+labubu UI 左侧 **Logs** 页(`/logs`):可见 jiuwenclaw 日志,按 severity / event_name / trace_id 过滤,body 全文搜索。
+打开任一 trace,其详情下显示该请求执行期间的关联日志(labubu `GET /api/v1/logs/:traceId`)。
+agent/LLM/tool 执行期间的日志带 trace_id(挂在 trace 下);网关路由前等日志无 trace_id,作为独立日志入库。
+
 > 排查 API:`GET http://localhost:8080/api/v1/services`(应含 `jiuwenclaw`)、`GET http://localhost:8080/api/v1/traces?service=jiuwenclaw`、`GET http://localhost:8080/api/v1/traces/{trace_id}`(注意:含消息内容的 trace,labubu 的 API JSON 可能因 JSON-string 属性转义而解析失败,但 UI 能正常显示;详见 `docs/troubleshooting/streaming-tool-span-parentage.md`)。
 
 ## 4. 常见坑
@@ -108,6 +117,8 @@ npm run dev   # vite,默认 :5173
 - **第一次 LLM 调用没输出**:那是 tool_call 响应(模型决定调工具,无文本)。已修(按 index 累积 tool_call 增量作为输出)。
 - **`jiuwen-instrument jiuwenclaw.app_agentserver` 报 `unrecognized arguments`**:已修(CLI argv 剥离模块名)。确认 instrumentor 是最新版(editable)。
 - **trace 里 scope 不是 `jiuwenswarm_instrumentor`**:那是旧 telemetry 的 span(旧 rail 没 `_degraded=True`)。
+- **labubu Logs 页没数据**:确认 `OTEL_LOGS_EXPORTER=otlp`(默认 `none` 不采);确认 labubu `POST /v1/logs` 可达(`curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:4318/v1/logs` 应 200)。`OTEL_LOGS_LEVEL=DEBUG` 会爆量,默认 INFO。
+- **日志里没 prompt 等敏感字段被脱敏**:正常 —— instrumentor 复用了 jiuwenclaw 自有的 `SensitiveDataFilter`(从 `jiuwenclaw` logger 已有 handler 复制);若 jiuwenclaw 没装 filter,instrumentor 回退到 WARNING-only(不发 INFO)。
 
 ## 附录:sitecustomize 自动激活(一条命令启动,需授权)
 
