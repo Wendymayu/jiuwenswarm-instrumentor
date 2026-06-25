@@ -106,10 +106,29 @@ class OTelLogHandler(logging.Handler):
         self._excluded = tuple(excluded_loggers)
         self._max_len = message_max_length
 
+    def handle(self, record):
+        # Skip excluded loggers early (before any filter side-effects).
+        if any(s in record.name for s in self._excluded):
+            return False
+        # Run copied filters for their side-effects (e.g. SensitiveDataFilter redaction)
+        # but do NOT let routing/component filters reject records — we capture all
+        # jiuwenclaw logs. stdlib Handler.handle skips emit when any filter returns False,
+        # which would drop most app logs (the app's filters include component/identity
+        # routing filters that reject records not meant for a specific handler/file).
+        for f in self.filters:
+            try:
+                f.filter(record)
+            except Exception:
+                pass
+        self.acquire()
+        try:
+            self.emit(record)
+        finally:
+            self.release()
+        return True
+
     def emit(self, record):
         try:
-            if any(s in record.name for s in self._excluded):
-                return
             attrs = _record_to_attributes(record, self._max_len)
             event_name = _extract_event_name(record)
             if event_name:

@@ -260,3 +260,22 @@ def test_setup_logger_at_import_time_reattaches(otel_logger, clean_jiuwenclaw_lo
     assert len(ours) == 1  # survived the import-time clear
     assert ours[0].level == logging.INFO  # app filter present -> INFO (not WARNING fallback)
     assert any(isinstance(f, RedactFilter) for f in ours[0].filters)  # redaction piggybacked
+
+
+def test_rejecting_filter_does_not_drop_log(otel_logger, clean_jiuwenclaw_logger):
+    """Regression: the app's filters include routing/component filters that return False
+    (reject records not meant for a specific handler/file). Our handler must run copied
+    filters only for side-effects (redaction) and NOT let them drop the log — otherwise
+    most jiuwenclaw logs never reach OTel."""
+    lp_logger, exporter = otel_logger
+    class RejectFilter(logging.Filter):
+        def filter(self, record):
+            return False  # simulates a routing filter that rejects
+    pre = logging.StreamHandler()
+    pre.addFilter(RejectFilter())
+    clean_jiuwenclaw_logger.addHandler(pre)
+    instrument_logs(otel_logger=lp_logger, level="INFO")
+    logging.getLogger("jiuwenclaw").info("should still be captured")
+    logs = exporter.get_finished_logs()
+    assert len(logs) == 1
+    assert logs[0].log_record.body == "should still be captured"
