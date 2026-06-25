@@ -159,22 +159,24 @@ class OTelLogHandler(logging.Handler):
         try:
             if any(s in record.name for s in self._excluded):
                 return
-            span_ctx = trace.get_current_span().get_span_context()
             attrs = _record_to_attributes(record, self._max_len)
             event_name = _extract_event_name(record)
             if event_name:
+                # labubu 的 OTLP proto (v0.20.0) 无原生 event_name 字段,从 attributes["event.name"] 提取;
+                # 同时设原生 event_name 字段,兼容 Phoenix 等新协议后端。
                 attrs["event.name"] = event_name
-            self._otel_logger.emit(LogRecord(
+            kwargs = dict(
                 timestamp=int(record.created * 1e9),
                 observed_timestamp=time.time_ns(),
-                trace_id=span_ctx.trace_id if span_ctx.is_valid else None,
-                span_id=span_ctx.span_id if span_ctx.is_valid else None,
-                trace_flags=span_ctx.trace_flags if span_ctx.is_valid else None,
+                context=get_current(),  # SDK 据此设 trace_id/span_id/trace_flags
                 severity_text=_severity_text(record.levelno),
                 severity_number=_severity_number(record.levelno),
                 body=_cap(_format_body(record), self._max_len),
                 attributes=attrs,
-            ))
+            )
+            if event_name:
+                kwargs["event_name"] = event_name
+            self._otel_logger.emit(LogRecord(**kwargs))
         except Exception:
             self.handleError(record)
 ```
@@ -194,7 +196,7 @@ class OTelLogHandler(logging.Handler):
   | 0 (NOTSET) | 9 | INFO |
 
   labubu 在 `translateLogs` 里按 SeverityNumber 归一到 `WARN`/`FATAL` 等(见其 `storage.go` `severityFromNumber`),SeverityText 也用规范串即可对齐。
-- **trace 关联**:`trace.get_current_span().get_span_context()`;`is_valid` 时填 `trace_id`/`span_id`/`trace_flags`。agent/LLM/tool 执行期间的日志(在 `jiuwenclaw.agent.invoke` 等当前 span 内)关联;trace 外日志(网关路由前等)无 trace_id,作为独立日志入库。
+- **trace 关联**:LogRecord 构造时传 `context=get_current()`(OTel 当前 context,携带活跃 span);SDK 据此自动设 `trace_id`/`span_id`/`trace_flags`(直接传 `trace_id=`/`span_id=` 已废弃)。agent/LLM/tool 执行期间的日志(在 `jiuwenclaw.agent.invoke` 等当前 span 内)关联;trace 外日志(网关路由前等)`get_current_span(context)` 返回无效 span → trace_id 为 None,作为独立日志入库。
 - **attributes**(`_record_to_attributes`):从 `record.__dict__` 取非标准键(`user_visible`/`host`/`port` 等 `extra` 字段),stringify + 截断;并加 `code.function`/`code.filepath`/`code.lineno`/`log.logger`/`thread.id`/`process.id`。stdlib 内部键(name/msg/args/levelno/levelname/created/.../message)排除。
 - **`event.name`**(`_extract_event_name`):仅当 `record.__dict__` 含 `event_name`/`event.name`/`event` 时取值 → 填 `event.name` 属性(labubu 提升为 `event_name` 列)。jiuwenclaw 的 `user_visible` 是可见性标签,不强转。
 
