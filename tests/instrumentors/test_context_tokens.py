@@ -120,3 +120,17 @@ def test_fallback_no_tiktoken(monkeypatch):
     c = _get_token_counter("gpt-4o")
     assert isinstance(c, _LenCounter)
     assert c.count("hello") == len("hello") // 4
+
+
+def test_tiktoken_counter_count_and_fallback():
+    """_TiktokenCounter.count() uses the encoder; falls back to len//4 on encode error."""
+    import types
+    from jiuwenswarm_instrumentor.instrumentors.context_tokens import _TiktokenCounter
+    fake_enc = types.SimpleNamespace(encode=lambda text, disallowed_special=(): (text or "").split())
+    c = _TiktokenCounter(fake_enc)
+    assert c.count("hello world") == 2  # 2 words → 2 "tokens"
+    assert c.count("") == 0
+    # encode-error fallback → len//4
+    def _boom(text, disallowed_special=()): raise RuntimeError("boom")
+    c2 = _TiktokenCounter(types.SimpleNamespace(encode=_boom))
+    assert c2.count("hello") == len("hello") // 4
