@@ -6,6 +6,7 @@ import types
 
 from jiuwenswarm_instrumentor import attributes as A
 from jiuwenswarm_instrumentor.context import current_request_attrs
+from jiuwenswarm_instrumentor.instrumentors.context_tokens import record_context_composition
 from jiuwenswarm_instrumentor.wrap import patch_method
 from opentelemetry.trace import StatusCode, SpanKind
 
@@ -157,6 +158,7 @@ def instrument_llm(tracer, metrics, *, log_messages=False, message_max_length=40
                                            top_p=top_p, model=model, max_tokens=max_tokens, stop=stop,
                                            output_parser=output_parser, timeout=timeout, **kw)
                     _record_usage(span, metrics, result, mdl, provider)
+                    record_context_composition(span, metrics, messages, tools, mdl)
                     finish = getattr(result, "finish_reason", None)
                     if finish and str(finish) != "null":
                         span.set_attribute(A.GEN_AI_RESPONSE_FINISH_REASON, str(finish))
@@ -245,6 +247,7 @@ def instrument_llm(tracer, metrics, *, log_messages=False, message_max_length=40
             finally:
                 metrics.record_llm_duration(time.monotonic() - start,
                                             {A.GEN_AI_REQUEST_MODEL: mdl, A.GEN_AI_SYSTEM: provider.lower()})
+                record_context_composition(span, metrics, messages, tools, mdl)
                 span.end()
         return traced_stream
 
