@@ -1,5 +1,7 @@
 # tests/instrumentors/test_logs.py
 import logging
+import sys
+import types
 
 import pytest
 from opentelemetry._logs import SeverityNumber
@@ -9,7 +11,7 @@ from opentelemetry.sdk._logs.export import (
 )
 from opentelemetry.sdk.trace import TracerProvider
 
-from jiuwenswarm_instrumentor.instrumentors.logs import OTelLogHandler
+from jiuwenswarm_instrumentor.instrumentors.logs import OTelLogHandler, instrument_logs
 
 
 @pytest.fixture
@@ -99,3 +101,59 @@ def test_emit_never_raises(otel_logger, clean_jiuwenclaw_logger):
     clean_jiuwenclaw_logger.addHandler(OTelLogHandler(_Broken(), level="INFO"))
     logging.getLogger("jiuwenclaw").info("ok")  # must not raise
     assert exporter.get_finished_logs() == ()
+
+
+def test_filter_piggyback(otel_logger, clean_jiuwenclaw_logger):
+    lp_logger, exporter = otel_logger
+    class RedactFilter(logging.Filter):
+        def filter(self, record):
+            record.msg = record.msg.replace("secret", "***")
+            return True
+    pre = logging.StreamHandler()
+    pre.addFilter(RedactFilter())
+    clean_jiuwenclaw_logger.addHandler(pre)
+    instrument_logs(otel_logger=lp_logger, level="INFO")
+    logging.getLogger("jiuwenclaw").info("hello secret world")
+    lr = exporter.get_finished_logs()[0].log_record
+    assert lr.body == "hello *** world"
+    ours = [h for h in clean_jiuwenclaw_logger.handlers if getattr(h, "_jiuwenswarm_otel", False)]
+    assert len(ours) == 1
+    assert any(isinstance(f, RedactFilter) for f in ours[0].filters)
+
+
+def test_no_filters_warning_fallback(otel_logger, clean_jiuwenclaw_logger):
+    lp_logger, exporter = otel_logger
+    instrument_logs(otel_logger=lp_logger, level="INFO")  # no pre-existing filters
+    logging.getLogger("jiuwenclaw").info("dropped")
+    logging.getLogger("jiuwenclaw").warning("kept")
+    logs = exporter.get_finished_logs()
+    assert len(logs) == 1
+    assert logs[0].log_record.severity_text == "WARN"
+
+
+def test_setup_logger_reattach(otel_logger, clean_jiuwenclaw_logger, monkeypatch):
+    lp_logger, exporter = otel_logger
+    jl = logging.getLogger("jiuwenclaw")
+
+    def fake_setup_logger():
+        jl.handlers = []  # simulates jiuwenclaw clearing handlers
+
+    fake_mod = types.ModuleType("jiuwenclaw.utils")
+    fake_mod.setup_logger = fake_setup_logger
+    pkg = types.ModuleType("jiuwenclaw")
+    pkg.__path__ = []
+    monkeypatch.setitem(sys.modules, "jiuwenclaw", pkg)
+    monkeypatch.setitem(sys.modules, "jiuwenclaw.utils", fake_mod)
+
+    instrument_logs(otel_logger=lp_logger, level="INFO")
+    assert any(getattr(h, "_jiuwenswarm_otel", False) for h in jl.handlers)
+    fake_mod.setup_logger()  # wrapped: clears then re-attaches
+    assert any(getattr(h, "_jiuwenswarm_otel", False) for h in jl.handlers)
+
+
+def test_idempotent(otel_logger, clean_jiuwenclaw_logger):
+    lp_logger, exporter = otel_logger
+    instrument_logs(otel_logger=lp_logger, level="INFO")
+    instrument_logs(otel_logger=lp_logger, level="INFO")
+    ours = [h for h in clean_jiuwenclaw_logger.handlers if getattr(h, "_jiuwenswarm_otel", False)]
+    assert len(ours) == 1

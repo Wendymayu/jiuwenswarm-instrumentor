@@ -129,3 +129,76 @@ class OTelLogHandler(logging.Handler):
             self._otel_logger.emit(LogRecord(**kwargs))
         except Exception:
             self.handleError(record)
+
+
+def _copy_filters_from(src_logger, dst_handler):
+    """Copy logging.Filter objects from src_logger's existing handlers onto dst_handler.
+    Returns count copied (used to decide redaction/level fallback). Fail-soft."""
+    count = 0
+    seen = set()
+    for h in src_logger.handlers:
+        for f in getattr(h, "filters", ()):
+            key = id(f)
+            if key in seen:
+                continue
+            seen.add(key)
+            try:
+                dst_handler.addFilter(f)
+                count += 1
+            except Exception:
+                pass
+    return count
+
+
+def _patch_setup_logger_to_reattach(attach):
+    """Wrap jiuwenclaw.utils.setup_logger so our handler is re-attached after it
+    clears handlers. Fail-soft: no-op if jiuwenclaw.utils isn't importable."""
+    try:
+        import jiuwenclaw.utils as _u  # type: ignore
+    except Exception:
+        return
+    original = getattr(_u, "setup_logger", None)
+    if original is None or getattr(original, "_jiuwenswarm_wrapped", False):
+        return
+
+    def wrapped(*a, **kw):
+        try:
+            return original(*a, **kw)
+        finally:
+            try:
+                attach()
+            except Exception:
+                logger.debug("[instrumentor] logs re-attach after setup_logger failed", exc_info=True)
+
+    wrapped._jiuwenswarm_wrapped = True
+    _u.setup_logger = wrapped
+
+
+def instrument_logs(otel_logger=None, *, level="INFO", excluded_loggers=(), message_max_length=8192):
+    """Attach an OTelLogHandler to logging.getLogger('jiuwenclaw').
+    Idempotent + fail-soft. Re-attaches after jiuwenclaw's setup_logger clears handlers.
+    Copies the app's existing logging.Filters (redaction) onto our handler; falls back
+    to WARNING-only if no filters are found (no redaction guarantee)."""
+    if otel_logger is None:
+        otel_logger = get_logger("jiuwenswarm_instrumentor.logs")
+
+    handler = OTelLogHandler(
+        otel_logger, level=level,
+        excluded_loggers=excluded_loggers,
+        message_max_length=message_max_length,
+    )
+    handler._jiuwenswarm_otel = True  # idempotency marker
+
+    def attach():
+        jl = logging.getLogger("jiuwenclaw")
+        if any(getattr(h, "_jiuwenswarm_otel", False) for h in jl.handlers):
+            return  # already attached
+        copied = _copy_filters_from(jl, handler)
+        if copied:
+            handler.setLevel(_level_to_stdlib(level))
+        else:
+            handler.setLevel(max(_level_to_stdlib(level), logging.WARNING))
+        jl.addHandler(handler)
+
+    attach()
+    _patch_setup_logger_to_reattach(attach)
