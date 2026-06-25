@@ -93,10 +93,14 @@ npm run dev   # vite,默认 :5173
 
 | span | 属性/事件 |
 |---|---|
+| `channel.request` | gateway 侧,覆盖消息处理全程;`jiuwenclaw.channel.id`/`jiuwenclaw.request.id`(尽力) |
+| `jiuwenclaw.gateway.agent.request` | gateway→agentserver WS 往返(CLIENT);是 agentserver 端 `jiuwenclaw.agent.invoke` 的父 span(端到端 trace 串联) |
 | `jiuwenclaw.agent.invoke` | `gen_ai.agent.name`、`jiuwenclaw.session.id` |
 | `gen_ai.chat` | `gen_ai.system`/`request.model`/`usage.input_tokens`/`output_tokens`/`total_tokens`、`streaming.first_token_ms`(流式)、`response.finish_reason`、`gen_ai.input.messages`(输入消息 JSON)、`gen_ai.output.messages`(输出/含 tool_calls)、`gen_ai.tool.definitions`(可选工具列表) |
 | `gen_ai.tool` | `gen_ai.tool.name`/`call.id`、`gen_ai.tool.arguments`/`result`(OTEL_LOG_MESSAGES=true);skill 工具额外带 `gen_ai.operation.name=load_skill/release_skill`、`gen_ai.skill.name`、`gen_ai.skill.id` + `skill.loaded`/`skill.released` 事件 |
 | `jiuwenclaw.session.create` / `jiuwenclaw.session.end` | `jiuwenclaw.session.id` |
+
+> 端到端 trace:`channel.request` → `jiuwenclaw.gateway.agent.request`(gateway CLIENT)→ `jiuwenclaw.agent.invoke`(agentserver,经 W3C traceparent 跨 WS 续父)→ `gen_ai.chat`/`gen_ai.tool`。gateway 与 agentserver 的 jiuwenclaw 日志都带同一 trace_id,被 labubu 关联保留(不被 5min 清)。
 
 ### metrics
 

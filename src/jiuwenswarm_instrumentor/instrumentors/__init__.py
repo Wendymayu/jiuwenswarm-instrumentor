@@ -2,7 +2,7 @@
 from __future__ import annotations
 import logging
 
-from jiuwenswarm_instrumentor.instrumentors import llm, tool, agent, session, logs
+from jiuwenswarm_instrumentor.instrumentors import llm, tool, agent, session, logs, gateway, agentserver
 from jiuwenswarm_instrumentor.metrics import Metrics
 
 logger = logging.getLogger("jiuwenswarm_instrumentor")
@@ -34,3 +34,15 @@ def apply_instrumentors(tracer, meter, cfg):
             logger.info("[instrumentor] applied logs")
         except Exception:
             logger.exception("[instrumentor] failed to apply logs — skipping")
+
+    if getattr(cfg, "traces_exporter", "none") != "none":
+        try:
+            gateway.instrument_gateway(tracer)
+            logger.info("[instrumentor] applied gateway")
+        except Exception:
+            logger.exception("[instrumentor] failed to apply gateway — skipping")
+        try:
+            agentserver.instrument_agentserver(tracer)
+            logger.info("[instrumentor] applied agentserver")
+        except Exception:
+            logger.exception("[instrumentor] failed to apply agentserver — skipping")
