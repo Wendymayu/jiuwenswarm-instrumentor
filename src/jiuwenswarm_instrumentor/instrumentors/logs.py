@@ -1,5 +1,6 @@
 # src/jiuwenswarm_instrumentor/instrumentors/logs.py
 from __future__ import annotations
+import functools
 import logging
 import time
 import traceback
@@ -161,6 +162,7 @@ def _patch_setup_logger_to_reattach(attach):
     if original is None or getattr(original, "_jiuwenswarm_wrapped", False):
         return
 
+    @functools.wraps(original)
     def wrapped(*a, **kw):
         try:
             return original(*a, **kw)
@@ -194,10 +196,11 @@ def instrument_logs(otel_logger=None, *, level="INFO", excluded_loggers=(), mess
         if any(getattr(h, "_jiuwenswarm_otel", False) for h in jl.handlers):
             return  # already attached
         copied = _copy_filters_from(jl, handler)
-        if copied:
-            handler.setLevel(_level_to_stdlib(level))
+        lvl = _level_to_stdlib(level)
+        if copied or handler.filters:
+            handler.setLevel(lvl)
         else:
-            handler.setLevel(max(_level_to_stdlib(level), logging.WARNING))
+            handler.setLevel(max(lvl, logging.WARNING))
         jl.addHandler(handler)
 
     attach()

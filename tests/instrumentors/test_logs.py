@@ -113,6 +113,8 @@ def test_filter_piggyback(otel_logger, clean_jiuwenclaw_logger):
     pre.addFilter(RedactFilter())
     clean_jiuwenclaw_logger.addHandler(pre)
     instrument_logs(otel_logger=lp_logger, level="INFO")
+    # our handler copied the filter; prove the COPY redacts in isolation by removing `pre`
+    clean_jiuwenclaw_logger.removeHandler(pre)
     logging.getLogger("jiuwenclaw").info("hello secret world")
     lr = exporter.get_finished_logs()[0].log_record
     assert lr.body == "hello *** world"
@@ -134,9 +136,16 @@ def test_no_filters_warning_fallback(otel_logger, clean_jiuwenclaw_logger):
 def test_setup_logger_reattach(otel_logger, clean_jiuwenclaw_logger, monkeypatch):
     lp_logger, exporter = otel_logger
     jl = logging.getLogger("jiuwenclaw")
+    class RedactFilter(logging.Filter):
+        def filter(self, record):
+            return True
 
     def fake_setup_logger():
-        jl.handlers = []  # simulates jiuwenclaw clearing handlers
+        # realistic: clear then re-add an app handler carrying a redaction filter
+        jl.handlers = []
+        app_h = logging.StreamHandler()
+        app_h.addFilter(RedactFilter())
+        jl.addHandler(app_h)
 
     fake_mod = types.ModuleType("jiuwenclaw.utils")
     fake_mod.setup_logger = fake_setup_logger
@@ -147,8 +156,11 @@ def test_setup_logger_reattach(otel_logger, clean_jiuwenclaw_logger, monkeypatch
 
     instrument_logs(otel_logger=lp_logger, level="INFO")
     assert any(getattr(h, "_jiuwenswarm_otel", False) for h in jl.handlers)
-    fake_mod.setup_logger()  # wrapped: clears then re-attaches
-    assert any(getattr(h, "_jiuwenswarm_otel", False) for h in jl.handlers)
+    fake_mod.setup_logger()  # wrapped: clears+re-adds app handler, then re-attaches ours
+    ours = [h for h in jl.handlers if getattr(h, "_jiuwenswarm_otel", False)]
+    assert len(ours) == 1
+    assert ours[0].level == logging.INFO  # redaction present -> INFO retained
+    assert any(isinstance(f, RedactFilter) for f in ours[0].filters)  # filter piggybacked
 
 
 def test_idempotent(otel_logger, clean_jiuwenclaw_logger):
@@ -157,3 +169,41 @@ def test_idempotent(otel_logger, clean_jiuwenclaw_logger):
     instrument_logs(otel_logger=lp_logger, level="INFO")
     ours = [h for h in clean_jiuwenclaw_logger.handlers if getattr(h, "_jiuwenswarm_otel", False)]
     assert len(ours) == 1
+
+
+def test_setup_logger_clear_only_keeps_info(otel_logger, clean_jiuwenclaw_logger, monkeypatch):
+    """Clear-only setup_logger (no app filters re-added) must keep INFO because our
+    handler retains its redaction filters from the first attach (regression for the
+    level-downgrade bug)."""
+    lp_logger, exporter = otel_logger
+    jl = logging.getLogger("jiuwenclaw")
+    class RedactFilter(logging.Filter):
+        def filter(self, record):
+            return True
+
+    # clear-only setup_logger: clears handlers, does NOT re-add any app handler/filter
+    def fake_setup_logger():
+        jl.handlers = []
+    fake_mod = types.ModuleType("jiuwenclaw.utils")
+    fake_mod.setup_logger = fake_setup_logger
+    pkg = types.ModuleType("jiuwenclaw")
+    pkg.__path__ = []
+    monkeypatch.setitem(sys.modules, "jiuwenclaw", pkg)
+    monkeypatch.setitem(sys.modules, "jiuwenclaw.utils", fake_mod)
+
+    # first attach: app has a redaction filter -> our handler copies it, level INFO.
+    # (fake modules must be in sys.modules BEFORE instrument_logs so the patch wraps
+    # fake_mod.setup_logger; otherwise the import inside _patch_setup_logger_to_reattach
+    # fails and the wrap is a no-op.)
+    pre = logging.StreamHandler()
+    pre.addFilter(RedactFilter())
+    jl.addHandler(pre)
+    instrument_logs(otel_logger=lp_logger, level="INFO")
+    ours = [h for h in jl.handlers if getattr(h, "_jiuwenswarm_otel", False)]
+    assert ours[0].level == logging.INFO
+
+    fake_mod.setup_logger()  # wrapped: clears (no re-add), then re-attaches ours
+    ours = [h for h in jl.handlers if getattr(h, "_jiuwenswarm_otel", False)]
+    assert len(ours) == 1
+    assert ours[0].level == logging.INFO  # NOT downgraded (handler retains filters)
+    assert any(isinstance(f, RedactFilter) for f in ours[0].filters)
