@@ -1,5 +1,4 @@
 # tests/instrumentors/test_gateway.py
-import pytest
 from opentelemetry import trace
 from jiuwenswarm_instrumentor.instrumentors.gateway import instrument_gateway
 
@@ -56,6 +55,8 @@ async def test_inject_failsoft_no_channel_context(exporter):
     env = FakeEnvelope(channel_context=None)
     result = await FakeAgentClient().send_request(env)  # must not raise
     assert result == "resp"
+    assert isinstance(env.channel_context, dict)  # promoted from None
+    assert "traceparent" in env.channel_context  # inject still ran on the fresh dict
 
 
 async def test_process_stream_creates_channel_request_span(exporter):

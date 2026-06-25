@@ -1,11 +1,14 @@
 # src/jiuwenswarm_instrumentor/instrumentors/gateway.py
 from __future__ import annotations
+import logging
 
 from opentelemetry.propagate import inject
 from opentelemetry.trace import SpanKind
 
 from jiuwenswarm_instrumentor import attributes as A
 from jiuwenswarm_instrumentor.wrap import patch_method
+
+logger = logging.getLogger("jiuwenswarm_instrumentor")
 
 
 def _inject_traceparent(envelope):
@@ -66,6 +69,7 @@ def instrument_gateway(tracer, *, message_handler_cls=None, agent_client_cls=Non
             from jiuwenclaw.gateway.message_handler import MessageHandler
             message_handler_cls = MessageHandler
         except Exception:
+            logger.warning("[instrumentor] jiuwenclaw.gateway.message_handler unavailable — skipping MessageHandler patch")
             message_handler_cls = None
     if message_handler_cls is not None:
         def factory_process(original):
@@ -92,6 +96,7 @@ def instrument_gateway(tracer, *, message_handler_cls=None, agent_client_cls=Non
             from jiuwenclaw.gateway.agent_client import WebSocketAgentServerClient
             agent_client_cls = WebSocketAgentServerClient
         except Exception:
+            logger.warning("[instrumentor] jiuwenclaw.gateway.agent_client unavailable — skipping agent_client patch")
             agent_client_cls = None
     if agent_client_cls is not None:
         def factory_send(original):
