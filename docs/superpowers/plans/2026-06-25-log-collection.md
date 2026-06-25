@@ -283,8 +283,7 @@ def test_extra_attributes(otel_logger, clean_jiuwenclaw_logger):
     assert lr.attributes["user_visible"] == "progress"
     assert lr.attributes["host"] == "h1"
     assert lr.attributes["log.logger"] == "jiuwenclaw"
-    assert lr.attributes["code.function"] == "test_trace_correlation" or \
-           lr.attributes["code.function"]  # funcName present
+    assert lr.attributes["code.function"] == "test_extra_attributes"
 
 
 def test_event_name(otel_logger, clean_jiuwenclaw_logger):
