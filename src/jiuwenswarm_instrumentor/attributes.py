@@ -34,7 +34,6 @@ GEN_AI_CONTEXT_USER_MESSAGES = "gen_ai.context.user_messages"
 GEN_AI_CONTEXT_ASSISTANT_MESSAGES = "gen_ai.context.assistant_messages"
 GEN_AI_CONTEXT_TOOL_RESULTS = "gen_ai.context.tool_results"
 GEN_AI_CONTEXT_TOOL_DEFINITIONS = "gen_ai.context.tool_definitions"
-GEN_AI_USAGE_ESTIMATED = "gen_ai.usage.estimated"
 
 # jiuwenclaw custom dimensions
 JIUWENCLAW_SESSION_ID = "jiuwenclaw.session.id"
