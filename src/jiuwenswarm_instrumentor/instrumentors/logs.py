@@ -19,13 +19,14 @@ _RESERVED_ATTRS = frozenset({
 })
 
 _SEVERITY_BY_LEVELNO = {
+    0: SeverityNumber.INFO,
     10: SeverityNumber.DEBUG,
     20: SeverityNumber.INFO,
     30: SeverityNumber.WARN,
     40: SeverityNumber.ERROR,
     50: SeverityNumber.FATAL,
 }
-_SEVERITY_TEXT = {10: "DEBUG", 20: "INFO", 30: "WARN", 40: "ERROR", 50: "FATAL"}
+_SEVERITY_TEXT = {0: "INFO", 10: "DEBUG", 20: "INFO", 30: "WARN", 40: "ERROR", 50: "FATAL"}
 
 _EVENT_KEYS = ("event_name", "event.name", "event")
 
@@ -46,7 +47,11 @@ def _level_to_stdlib(level):
 
 def _cap(text, max_len):
     text = "" if text is None else str(text)
-    return text if len(text) <= max_len else text[: max_len - 3] + "..."
+    if len(text) <= max_len:
+        return text
+    if max_len <= 3:
+        return text[:max_len]
+    return text[: max_len - 3] + "..."
 
 
 def _format_body(record):
