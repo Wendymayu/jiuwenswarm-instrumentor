@@ -29,8 +29,8 @@ def activate() -> bool:
         apply_instrumentors(trace.get_tracer("jiuwenswarm_instrumentor"),
                             metrics.get_meter("jiuwenswarm_instrumentor"), cfg)
         _APPLIED = True
-        logger.info("[instrumentor] active: traces=%s metrics=%s endpoint=%s",
-                    cfg.traces_exporter, cfg.metrics_exporter, cfg.traces_endpoint)
+        logger.info("[instrumentor] active: traces=%s metrics=%s logs=%s endpoint=%s",
+                    cfg.traces_exporter, cfg.metrics_exporter, cfg.logs_exporter, cfg.traces_endpoint)
         return True
     except Exception:
         logger.exception("[instrumentor] activation failed — running without instrumentation")

@@ -39,3 +39,21 @@ def test_main_strips_module_name_from_argv(monkeypatch):
     activate.main()
     assert seen["target"] == "jiuwenclaw.app_agentserver"
     assert seen["argv"][1:] == ["--port", "9999"]  # module name stripped, real args preserved
+
+
+def test_apply_instrumentors_calls_logs_when_configured(monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        "jiuwenswarm_instrumentor.instrumentors.logs.instrument_logs",
+        lambda *a, **k: called.append(True),
+    )
+    for name in ("llm", "tool", "agent", "session"):
+        monkeypatch.setattr(
+            f"jiuwenswarm_instrumentor.instrumentors.{name}.instrument_{name}",
+            lambda *a, _n=name, **k: None,
+        )
+    from jiuwenswarm_instrumentor.config import InstrumentorConfig
+    from jiuwenswarm_instrumentor.instrumentors import apply_instrumentors
+    cfg = InstrumentorConfig(enabled=True, logs_exporter="otlp")
+    apply_instrumentors(tracer=object(), meter=Mock(), cfg=cfg)
+    assert called == [True]

@@ -2,7 +2,7 @@
 from __future__ import annotations
 import logging
 
-from jiuwenswarm_instrumentor.instrumentors import llm, tool, agent, session
+from jiuwenswarm_instrumentor.instrumentors import llm, tool, agent, session, logs
 from jiuwenswarm_instrumentor.metrics import Metrics
 
 logger = logging.getLogger("jiuwenswarm_instrumentor")
@@ -23,3 +23,14 @@ def apply_instrumentors(tracer, meter, cfg):
             logger.info("[instrumentor] applied %s", label)
         except Exception:
             logger.exception("[instrumentor] failed to apply %s — skipping", label)
+
+    if getattr(cfg, "logs_exporter", "none") != "none":
+        try:
+            logs.instrument_logs(
+                level=getattr(cfg, "log_level", "INFO"),
+                excluded_loggers=getattr(cfg, "log_excluded_loggers", ()),
+                message_max_length=getattr(cfg, "log_message_max_length", 8192),
+            )
+            logger.info("[instrumentor] applied logs")
+        except Exception:
+            logger.exception("[instrumentor] failed to apply logs — skipping")
