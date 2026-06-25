@@ -10,7 +10,7 @@ from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader, ConsoleMetricExporter
 from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import (
-    BatchLogRecordProcessor, SimpleLogRecordProcessor, ConsoleLogExporter,
+    BatchLogRecordProcessor, SimpleLogRecordProcessor, ConsoleLogRecordExporter,
 )
 
 from jiuwenswarm_instrumentor.config import InstrumentorConfig
@@ -83,7 +83,7 @@ def _attach_logs(resource, cfg):
         if cfg.logs_exporter == "otlp":
             lp.add_log_record_processor(BatchLogRecordProcessor(_otlp_log_exporter(cfg)))
         elif cfg.logs_exporter == "console":
-            lp.add_log_record_processor(SimpleLogRecordProcessor(ConsoleLogExporter()))
+            lp.add_log_record_processor(SimpleLogRecordProcessor(ConsoleLogRecordExporter()))
         try:
             logs.set_logger_provider(lp)
         except Exception:
