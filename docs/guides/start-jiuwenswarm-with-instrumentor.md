@@ -117,7 +117,7 @@ agent/LLM/tool 执行期间的日志带 trace_id(挂在 trace 下);网关路由�
 - **第一次 LLM 调用没输出**:那是 tool_call 响应(模型决定调工具,无文本)。已修(按 index 累积 tool_call 增量作为输出)。
 - **`jiuwen-instrument jiuwenclaw.app_agentserver` 报 `unrecognized arguments`**:已修(CLI argv 剥离模块名)。确认 instrumentor 是最新版(editable)。
 - **trace 里 scope 不是 `jiuwenswarm_instrumentor`**:那是旧 telemetry 的 span(旧 rail 没 `_degraded=True`)。
-- **labubu Logs 页没数据**:确认 `OTEL_LOGS_EXPORTER=otlp`(默认 `none` 不采);确认 labubu `POST /v1/logs` 可达(`curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:4318/v1/logs` 应 200)。`OTEL_LOGS_LEVEL=DEBUG` 会爆量,默认 INFO。
+- **labubu Logs 页没数据**:确认 `OTEL_LOGS_EXPORTER=otlp`(默认 `none` 不采);确认 labubu `POST /v1/logs` 可达(`curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:4318/v1/logs` 应 200)。`OTEL_LOGS_LEVEL=DEBUG` 会爆量,默认 INFO。注意 labubu 每 5min 清理无 trace 关联的日志(启动日志 `trace_id=0` 会被清)——5min 内查,或发 chat 消息让日志带 trace_id(被关联保留)。若 agentserver 日志全空而 gateway 有,多半是 filter 复用把路由 filter 也拷了导致记录被拒——详见 `docs/troubleshooting/logs-dropped-by-app-routing-filters.md`。
 - **日志里没 prompt 等敏感字段被脱敏**:正常 —— instrumentor 复用了 jiuwenclaw 自有的 `SensitiveDataFilter`(从 `jiuwenclaw` logger 已有 handler 复制);若 jiuwenclaw 没装 filter,instrumentor 回退到 WARNING-only(不发 INFO)。
 
 ## 附录:sitecustomize 自动激活(一条命令启动,需授权)
