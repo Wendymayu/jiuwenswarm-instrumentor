@@ -171,10 +171,10 @@ def _copy_filters_from(src_logger, dst_handler):
 
 
 def _patch_setup_logger_to_reattach(attach):
-    """Wrap jiuwenclaw.utils.setup_logger so our handler is re-attached after it
-    clears handlers. Fail-soft: no-op if jiuwenclaw.utils isn't importable."""
+    """Wrap jiuwenswarm.common.utils.setup_logger so our handler is re-attached after it
+    clears handlers. Fail-soft: no-op if jiuwenswarm.common.utils isn't importable."""
     try:
-        import jiuwenclaw.utils as _u  # type: ignore
+        import jiuwenswarm.common.utils as _u  # type: ignore
     except Exception:
         return
     original = getattr(_u, "setup_logger", None)
@@ -196,8 +196,8 @@ def _patch_setup_logger_to_reattach(attach):
 
 
 def instrument_logs(otel_logger=None, *, level="INFO", excluded_loggers=(), message_max_length=8192):
-    """Attach an OTelLogHandler to logging.getLogger('jiuwenclaw').
-    Idempotent + fail-soft. Re-attaches after jiuwenclaw's setup_logger clears handlers.
+    """Attach an OTelLogHandler to logging.getLogger('jiuwenswarm').
+    Idempotent + fail-soft. Re-attaches after jiuwenswarm's setup_logger clears handlers.
     Copies the app's existing logging.Filters (redaction) onto our handler; falls back
     to WARNING-only if no filters are found (no redaction guarantee)."""
     if otel_logger is None:
@@ -211,7 +211,7 @@ def instrument_logs(otel_logger=None, *, level="INFO", excluded_loggers=(), mess
     handler._jiuwenswarm_otel = True  # idempotency marker
 
     def attach():
-        jl = logging.getLogger("jiuwenclaw")
+        jl = logging.getLogger("jiuwenswarm")
         if any(getattr(h, "_jiuwenswarm_otel", False) for h in jl.handlers):
             return  # already attached
         copied = _copy_filters_from(jl, handler)

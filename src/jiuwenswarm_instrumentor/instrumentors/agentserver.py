@@ -36,10 +36,10 @@ def instrument_agentserver(tracer, *, adapter_cls=None):
     Fail-soft: skip if adapter import fails (test env without jiuwenclaw)."""
     if adapter_cls is None:
         try:
-            from jiuwenclaw.agentserver.deep_agent.interface_deep import JiuWenClawDeepAdapter
-            adapter_cls = JiuWenClawDeepAdapter
+            from jiuwenswarm.server.runtime.agent_adapter.interface_deep import JiuWenSwarmDeepAdapter
+            adapter_cls = JiuWenSwarmDeepAdapter
         except Exception:
-            logger.warning("[instrumentor] jiuwenclaw.agentserver.deep_agent unavailable — skipping JiuWenClawDeepAdapter patch")
+            logger.warning("[instrumentor] jiuwenswarm.server.runtime.agent_adapter.deep_agent unavailable — skipping JiuWenSwarmDeepAdapter patch")
             adapter_cls = None
     if adapter_cls is None:
         return

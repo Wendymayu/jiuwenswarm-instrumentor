@@ -7,20 +7,25 @@ from jiuwenswarm_instrumentor.wrap import patch_method
 from opentelemetry.trace import StatusCode, SpanKind
 
 
-def instrument_session(tracer, metrics, *, jiuwenclaw_cls=None):
-    """Wrap JiuWenClaw.create_instance + .cleanup (jiuwenclaw enterprise_dev, interface.py)."""
-    if jiuwenclaw_cls is None:
-        from jiuwenclaw.agentserver.interface import JiuWenClaw
-        jiuwenclaw_cls = JiuWenClaw
+def instrument_session(tracer, metrics, *, jiuwenswarm_cls=None):
+    """Wrap JiuWenSwarm.create_instance + .cleanup (jiuwenswarm develop, interface.py)."""
+    if jiuwenswarm_cls is None:
+        from jiuwenswarm.server.runtime.agent_adapter.interface import JiuWenSwarm
+        jiuwenswarm_cls = JiuWenSwarm
 
     def create_factory(original):
-        async def traced(self, config=None, *, mode="agent", session_id=None, **kw):
-            ctx_token = set_request_context(session_id=session_id)
-            attrs = {A.JIUWENCLAW_SESSION_ID: session_id or "", "jiuwenclaw.session.mode": mode}
+        async def traced(self, *args, **kw):
+            # signature-agnostic: develop's create_instance(self, config=None, *, mode="agent",
+            # sub_mode=None) has no session_id param. Set a placeholder request context, then
+            # read the real session id back from the instance after the call (like cleanup).
+            ctx_token = set_request_context(session_id="")
+            attrs = {"jiuwenclaw.session.mode": kw.get("mode", "agent")}
             attrs.update(current_request_attrs())
             with tracer.start_as_current_span("jiuwenclaw.session.create", kind=SpanKind.INTERNAL, attributes=attrs) as span:
                 try:
-                    result = await original(self, config, mode=mode, session_id=session_id, **kw)
+                    result = await original(self, *args, **kw)
+                    sid = getattr(self, "_session_id", None)
+                    span.set_attribute(A.JIUWENCLAW_SESSION_ID, sid or "")
                     span.set_status(StatusCode.OK)
                     return result
                 except Exception as exc:
@@ -53,5 +58,5 @@ def instrument_session(tracer, metrics, *, jiuwenclaw_cls=None):
                         pass
         return traced
 
-    patch_method(jiuwenclaw_cls, "create_instance", create_factory)
-    patch_method(jiuwenclaw_cls, "cleanup", cleanup_factory)
+    patch_method(jiuwenswarm_cls, "create_instance", create_factory)
+    patch_method(jiuwenswarm_cls, "cleanup", cleanup_factory)

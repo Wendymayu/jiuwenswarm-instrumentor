@@ -114,7 +114,7 @@ async def test_session_cleanup_clears_skill_state(exporter):
         _session_id = "sess-9"
         async def cleanup(self):
             pass
-    instrument_session(tracer, metrics, jiuwenclaw_cls=_FakeJW)
+    instrument_session(tracer, metrics, jiuwenswarm_cls=_FakeJW)
     await _FakeJW().cleanup()
     # orphan must be cleared by session cleanup
     assert skill.pop_release("sess-9", "orphan_skill") is None

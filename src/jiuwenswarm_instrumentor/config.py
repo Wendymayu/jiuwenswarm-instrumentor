@@ -15,7 +15,7 @@ class InstrumentorConfig:
     metrics_protocol: str = "grpc"
     metrics_headers: dict = None
     protocol: str = "grpc"
-    service_name: str = "jiuwenclaw"
+    service_name: str = "jiuwenswarm"
     log_messages: bool = False           # opt-in full prompt/response capture
     message_max_length: int = 4096
     logs_exporter: str = "none"          # otlp | console | none

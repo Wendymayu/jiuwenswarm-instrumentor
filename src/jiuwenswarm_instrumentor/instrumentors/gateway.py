@@ -66,19 +66,13 @@ def instrument_gateway(tracer, *, message_handler_cls=None, agent_client_cls=Non
     # --- channel.request span (MessageHandler.process_message / process_stream) ---
     if message_handler_cls is None:
         try:
-            from jiuwenclaw.gateway.message_handler import MessageHandler
+            from jiuwenswarm.gateway.message_handler.message_handler import MessageHandler
             message_handler_cls = MessageHandler
         except Exception:
-            logger.warning("[instrumentor] jiuwenclaw.gateway.message_handler unavailable — skipping MessageHandler patch")
+            logger.warning("[instrumentor] jiuwenswarm.gateway.message_handler unavailable — skipping MessageHandler patch")
             message_handler_cls = None
     if message_handler_cls is not None:
-        def factory_process(original):
-            async def traced(self, *args, **kw):
-                attrs = _process_attrs(args, kw)
-                with tracer.start_as_current_span("channel.request", kind=SpanKind.INTERNAL, attributes=attrs):
-                    return await original(self, *args, **kw)
-            return traced
-
+        # develop branch has no process_message (only process_stream); enterprise_dev had both.
         def factory_process_stream(original):
             async def traced(self, *args, **kw):
                 attrs = _process_attrs(args, kw)
@@ -86,16 +80,15 @@ def instrument_gateway(tracer, *, message_handler_cls=None, agent_client_cls=Non
                     return await original(self, *args, **kw)
             return traced
 
-        patch_method(message_handler_cls, "process_message", factory_process)
         patch_method(message_handler_cls, "process_stream", factory_process_stream)
 
-    # --- jiuwenclaw.gateway.agent.request CLIENT span + inject (send_request / send_request_stream) ---
+    # --- jiuwenswarm.gateway.agent.request CLIENT span + inject (send_request / send_request_stream) ---
     if agent_client_cls is None:
         try:
-            from jiuwenclaw.gateway.agent_client import WebSocketAgentServerClient
+            from jiuwenswarm.gateway.routing.agent_client import WebSocketAgentServerClient
             agent_client_cls = WebSocketAgentServerClient
         except Exception:
-            logger.warning("[instrumentor] jiuwenclaw.gateway.agent_client unavailable — skipping agent_client patch")
+            logger.warning("[instrumentor] jiuwenswarm.gateway.routing.agent_client unavailable — skipping agent_client patch")
             agent_client_cls = None
     if agent_client_cls is not None:
         def factory_send(original):

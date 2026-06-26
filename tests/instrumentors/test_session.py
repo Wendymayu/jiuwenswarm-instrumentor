@@ -5,7 +5,7 @@ from jiuwenswarm_instrumentor.instrumentors.session import instrument_session
 from jiuwenswarm_instrumentor.metrics import Metrics
 
 
-def _fake_jiuwenclaw_cls():
+def _fake_jiuwenswarm_cls():
     class FakeJW:
         async def create_instance(self, config=None, *, mode="agent", session_id=None):
             self._session_id = session_id
@@ -17,8 +17,8 @@ def _fake_jiuwenclaw_cls():
 async def test_session_spans(exporter):
     tracer = trace.get_tracer("t")
     metrics = Metrics(Mock())
-    Fake = _fake_jiuwenclaw_cls()
-    instrument_session(tracer, metrics, jiuwenclaw_cls=Fake)
+    Fake = _fake_jiuwenswarm_cls()
+    instrument_session(tracer, metrics, jiuwenswarm_cls=Fake)
     inst = Fake()
     await inst.create_instance(session_id="sess-7")
     await inst.cleanup()

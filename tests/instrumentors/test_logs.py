@@ -23,8 +23,8 @@ def otel_logger():
 
 
 @pytest.fixture
-def clean_jiuwenclaw_logger():
-    jl = logging.getLogger("jiuwenclaw")
+def clean_jiuwenswarm_logger():
+    jl = logging.getLogger("jiuwenswarm")
     saved = (jl.handlers[:], jl.level, jl.propagate)
     jl.handlers = []
     jl.setLevel(logging.INFO)
@@ -35,10 +35,10 @@ def clean_jiuwenclaw_logger():
     jl.propagate = saved[2]
 
 
-def test_emits_severity_and_body(otel_logger, clean_jiuwenclaw_logger):
+def test_emits_severity_and_body(otel_logger, clean_jiuwenswarm_logger):
     lp_logger, exporter = otel_logger
-    clean_jiuwenclaw_logger.addHandler(OTelLogHandler(lp_logger, level="INFO"))
-    logging.getLogger("jiuwenclaw").warning("hello %s", "world")
+    clean_jiuwenswarm_logger.addHandler(OTelLogHandler(lp_logger, level="INFO"))
+    logging.getLogger("jiuwenswarm").warning("hello %s", "world")
     logs = exporter.get_finished_logs()
     assert len(logs) == 1
     lr = logs[0].log_record
@@ -47,63 +47,63 @@ def test_emits_severity_and_body(otel_logger, clean_jiuwenclaw_logger):
     assert lr.body == "hello world"
 
 
-def test_trace_correlation(otel_logger, clean_jiuwenclaw_logger):
+def test_trace_correlation(otel_logger, clean_jiuwenswarm_logger):
     lp_logger, exporter = otel_logger
-    clean_jiuwenclaw_logger.addHandler(OTelLogHandler(lp_logger, level="INFO"))
-    logging.getLogger("jiuwenclaw").info("outside")  # no active span
+    clean_jiuwenswarm_logger.addHandler(OTelLogHandler(lp_logger, level="INFO"))
+    logging.getLogger("jiuwenswarm").info("outside")  # no active span
     tp = TracerProvider()
     tracer = tp.get_tracer("t")
     with tracer.start_as_current_span("s") as span:
         sc = span.get_span_context()
-        logging.getLogger("jiuwenclaw").info("inside")
+        logging.getLogger("jiuwenswarm").info("inside")
     logs = exporter.get_finished_logs()
     assert len(logs) == 2
     assert not logs[0].log_record.trace_id  # outside span -> 0/invalid
     assert logs[1].log_record.trace_id == sc.trace_id  # inside span -> correlated
 
 
-def test_extra_attributes(otel_logger, clean_jiuwenclaw_logger):
+def test_extra_attributes(otel_logger, clean_jiuwenswarm_logger):
     lp_logger, exporter = otel_logger
-    clean_jiuwenclaw_logger.addHandler(OTelLogHandler(lp_logger, level="INFO"))
-    logging.getLogger("jiuwenclaw").info("msg", extra={"user_visible": "progress", "host": "h1"})
+    clean_jiuwenswarm_logger.addHandler(OTelLogHandler(lp_logger, level="INFO"))
+    logging.getLogger("jiuwenswarm").info("msg", extra={"user_visible": "progress", "host": "h1"})
     lr = exporter.get_finished_logs()[0].log_record
     assert lr.attributes["user_visible"] == "progress"
     assert lr.attributes["host"] == "h1"
-    assert lr.attributes["log.logger"] == "jiuwenclaw"
+    assert lr.attributes["log.logger"] == "jiuwenswarm"
     assert lr.attributes["code.function"] == "test_extra_attributes"
 
 
-def test_event_name(otel_logger, clean_jiuwenclaw_logger):
+def test_event_name(otel_logger, clean_jiuwenswarm_logger):
     lp_logger, exporter = otel_logger
-    clean_jiuwenclaw_logger.addHandler(OTelLogHandler(lp_logger, level="INFO"))
-    logging.getLogger("jiuwenclaw").info("msg", extra={"event_name": "msg.received"})
+    clean_jiuwenswarm_logger.addHandler(OTelLogHandler(lp_logger, level="INFO"))
+    logging.getLogger("jiuwenswarm").info("msg", extra={"event_name": "msg.received"})
     lr = exporter.get_finished_logs()[0].log_record
     assert lr.attributes["event.name"] == "msg.received"
     assert lr.event_name == "msg.received"  # native field for Phoenix
 
 
-def test_excluded_logger(otel_logger, clean_jiuwenclaw_logger):
+def test_excluded_logger(otel_logger, clean_jiuwenswarm_logger):
     lp_logger, exporter = otel_logger
     h = OTelLogHandler(lp_logger, level="INFO", excluded_loggers=("jiuwenclaw.interface.resp",))
-    clean_jiuwenclaw_logger.addHandler(h)
+    clean_jiuwenswarm_logger.addHandler(h)
     logging.getLogger("jiuwenclaw.interface.resp").info("resp line")  # excluded
-    logging.getLogger("jiuwenclaw").info("kept")
+    logging.getLogger("jiuwenswarm").info("kept")
     logs = exporter.get_finished_logs()
     assert len(logs) == 1
-    assert logs[0].log_record.attributes["log.logger"] == "jiuwenclaw"
+    assert logs[0].log_record.attributes["log.logger"] == "jiuwenswarm"
 
 
-def test_emit_never_raises(otel_logger, clean_jiuwenclaw_logger):
+def test_emit_never_raises(otel_logger, clean_jiuwenswarm_logger):
     lp_logger, exporter = otel_logger
     class _Broken:
         def emit(self, *a, **k):
             raise RuntimeError("boom")
-    clean_jiuwenclaw_logger.addHandler(OTelLogHandler(_Broken(), level="INFO"))
-    logging.getLogger("jiuwenclaw").info("ok")  # must not raise
+    clean_jiuwenswarm_logger.addHandler(OTelLogHandler(_Broken(), level="INFO"))
+    logging.getLogger("jiuwenswarm").info("ok")  # must not raise
     assert exporter.get_finished_logs() == ()
 
 
-def test_filter_piggyback(otel_logger, clean_jiuwenclaw_logger):
+def test_filter_piggyback(otel_logger, clean_jiuwenswarm_logger):
     lp_logger, exporter = otel_logger
     class RedactFilter(logging.Filter):
         def filter(self, record):
@@ -111,31 +111,31 @@ def test_filter_piggyback(otel_logger, clean_jiuwenclaw_logger):
             return True
     pre = logging.StreamHandler()
     pre.addFilter(RedactFilter())
-    clean_jiuwenclaw_logger.addHandler(pre)
+    clean_jiuwenswarm_logger.addHandler(pre)
     instrument_logs(otel_logger=lp_logger, level="INFO")
     # our handler copied the filter; prove the COPY redacts in isolation by removing `pre`
-    clean_jiuwenclaw_logger.removeHandler(pre)
-    logging.getLogger("jiuwenclaw").info("hello secret world")
+    clean_jiuwenswarm_logger.removeHandler(pre)
+    logging.getLogger("jiuwenswarm").info("hello secret world")
     lr = exporter.get_finished_logs()[0].log_record
     assert lr.body == "hello *** world"
-    ours = [h for h in clean_jiuwenclaw_logger.handlers if getattr(h, "_jiuwenswarm_otel", False)]
+    ours = [h for h in clean_jiuwenswarm_logger.handlers if getattr(h, "_jiuwenswarm_otel", False)]
     assert len(ours) == 1
     assert any(isinstance(f, RedactFilter) for f in ours[0].filters)
 
 
-def test_no_filters_warning_fallback(otel_logger, clean_jiuwenclaw_logger):
+def test_no_filters_warning_fallback(otel_logger, clean_jiuwenswarm_logger):
     lp_logger, exporter = otel_logger
     instrument_logs(otel_logger=lp_logger, level="INFO")  # no pre-existing filters
-    logging.getLogger("jiuwenclaw").info("dropped")
-    logging.getLogger("jiuwenclaw").warning("kept")
+    logging.getLogger("jiuwenswarm").info("dropped")
+    logging.getLogger("jiuwenswarm").warning("kept")
     logs = exporter.get_finished_logs()
     assert len(logs) == 1
     assert logs[0].log_record.severity_text == "WARN"
 
 
-def test_setup_logger_reattach(otel_logger, clean_jiuwenclaw_logger, monkeypatch):
+def test_setup_logger_reattach(otel_logger, clean_jiuwenswarm_logger, monkeypatch):
     lp_logger, exporter = otel_logger
-    jl = logging.getLogger("jiuwenclaw")
+    jl = logging.getLogger("jiuwenswarm")
     class RedactFilter(logging.Filter):
         def filter(self, record):
             return True
@@ -147,12 +147,15 @@ def test_setup_logger_reattach(otel_logger, clean_jiuwenclaw_logger, monkeypatch
         app_h.addFilter(RedactFilter())
         jl.addHandler(app_h)
 
-    fake_mod = types.ModuleType("jiuwenclaw.utils")
+    fake_mod = types.ModuleType("jiuwenswarm.common.utils")
     fake_mod.setup_logger = fake_setup_logger
-    pkg = types.ModuleType("jiuwenclaw")
+    pkg = types.ModuleType("jiuwenswarm")
     pkg.__path__ = []
-    monkeypatch.setitem(sys.modules, "jiuwenclaw", pkg)
-    monkeypatch.setitem(sys.modules, "jiuwenclaw.utils", fake_mod)
+    common = types.ModuleType("jiuwenswarm.common")
+    common.__path__ = []
+    monkeypatch.setitem(sys.modules, "jiuwenswarm", pkg)
+    monkeypatch.setitem(sys.modules, "jiuwenswarm.common", common)
+    monkeypatch.setitem(sys.modules, "jiuwenswarm.common.utils", fake_mod)
 
     instrument_logs(otel_logger=lp_logger, level="INFO")
     assert any(getattr(h, "_jiuwenswarm_otel", False) for h in jl.handlers)
@@ -163,20 +166,20 @@ def test_setup_logger_reattach(otel_logger, clean_jiuwenclaw_logger, monkeypatch
     assert any(isinstance(f, RedactFilter) for f in ours[0].filters)  # filter piggybacked
 
 
-def test_idempotent(otel_logger, clean_jiuwenclaw_logger):
+def test_idempotent(otel_logger, clean_jiuwenswarm_logger):
     lp_logger, exporter = otel_logger
     instrument_logs(otel_logger=lp_logger, level="INFO")
     instrument_logs(otel_logger=lp_logger, level="INFO")
-    ours = [h for h in clean_jiuwenclaw_logger.handlers if getattr(h, "_jiuwenswarm_otel", False)]
+    ours = [h for h in clean_jiuwenswarm_logger.handlers if getattr(h, "_jiuwenswarm_otel", False)]
     assert len(ours) == 1
 
 
-def test_setup_logger_clear_only_keeps_info(otel_logger, clean_jiuwenclaw_logger, monkeypatch):
+def test_setup_logger_clear_only_keeps_info(otel_logger, clean_jiuwenswarm_logger, monkeypatch):
     """Clear-only setup_logger (no app filters re-added) must keep INFO because our
     handler retains its redaction filters from the first attach (regression for the
     level-downgrade bug)."""
     lp_logger, exporter = otel_logger
-    jl = logging.getLogger("jiuwenclaw")
+    jl = logging.getLogger("jiuwenswarm")
     class RedactFilter(logging.Filter):
         def filter(self, record):
             return True
@@ -184,12 +187,15 @@ def test_setup_logger_clear_only_keeps_info(otel_logger, clean_jiuwenclaw_logger
     # clear-only setup_logger: clears handlers, does NOT re-add any app handler/filter
     def fake_setup_logger():
         jl.handlers = []
-    fake_mod = types.ModuleType("jiuwenclaw.utils")
+    fake_mod = types.ModuleType("jiuwenswarm.common.utils")
     fake_mod.setup_logger = fake_setup_logger
-    pkg = types.ModuleType("jiuwenclaw")
+    pkg = types.ModuleType("jiuwenswarm")
     pkg.__path__ = []
-    monkeypatch.setitem(sys.modules, "jiuwenclaw", pkg)
-    monkeypatch.setitem(sys.modules, "jiuwenclaw.utils", fake_mod)
+    common = types.ModuleType("jiuwenswarm.common")
+    common.__path__ = []
+    monkeypatch.setitem(sys.modules, "jiuwenswarm", pkg)
+    monkeypatch.setitem(sys.modules, "jiuwenswarm.common", common)
+    monkeypatch.setitem(sys.modules, "jiuwenswarm.common.utils", fake_mod)
 
     # first attach: app has a redaction filter -> our handler copies it, level INFO.
     # (fake modules must be in sys.modules BEFORE instrument_logs so the patch wraps
@@ -209,14 +215,14 @@ def test_setup_logger_clear_only_keeps_info(otel_logger, clean_jiuwenclaw_logger
     assert any(isinstance(f, RedactFilter) for f in ours[0].filters)
 
 
-def test_setup_logger_at_import_time_reattaches(otel_logger, clean_jiuwenclaw_logger, monkeypatch):
+def test_setup_logger_at_import_time_reattaches(otel_logger, clean_jiuwenswarm_logger, monkeypatch):
     """Regression: jiuwenclaw.utils calls setup_logger() at module import time
     (utils.py:2821), which runs UNWRAPPED during `import jiuwenclaw.utils` inside
     _patch_setup_logger_to_reattach (the patch installs only after the import returns).
     instrument_logs must re-attach our handler after that import-time clear."""
     import importlib.abc, importlib.machinery
     lp_logger, exporter = otel_logger
-    jl = logging.getLogger("jiuwenclaw")
+    jl = logging.getLogger("jiuwenswarm")
     class RedactFilter(logging.Filter):
         def filter(self, record):
             return True
@@ -231,7 +237,7 @@ def test_setup_logger_at_import_time_reattaches(otel_logger, clean_jiuwenclaw_lo
         def create_module(self, spec):
             return None
         def exec_module(self, module):
-            if module.__name__ == "jiuwenclaw":
+            if module.__name__ in ("jiuwenswarm", "jiuwenswarm.common"):
                 module.__path__ = []  # package marker
                 return
             module.setup_logger = fake_setup_logger
@@ -239,16 +245,17 @@ def test_setup_logger_at_import_time_reattaches(otel_logger, clean_jiuwenclaw_lo
 
     class _Finder(importlib.abc.MetaPathFinder):
         def find_spec(self, fullname, path, target=None):
-            if fullname == "jiuwenclaw":
-                spec = importlib.machinery.ModuleSpec("jiuwenclaw", _Loader(), is_package=True)
+            if fullname in ("jiuwenswarm", "jiuwenswarm.common"):
+                spec = importlib.machinery.ModuleSpec(fullname, _Loader(), is_package=True)
                 spec.submodule_search_locations = []
                 return spec
-            if fullname == "jiuwenclaw.utils":
-                return importlib.machinery.ModuleSpec("jiuwenclaw.utils", _Loader())
+            if fullname == "jiuwenswarm.common.utils":
+                return importlib.machinery.ModuleSpec("jiuwenswarm.common.utils", _Loader())
             return None
 
-    monkeypatch.delitem(sys.modules, "jiuwenclaw", raising=False)
-    monkeypatch.delitem(sys.modules, "jiuwenclaw.utils", raising=False)
+    monkeypatch.delitem(sys.modules, "jiuwenswarm", raising=False)
+    monkeypatch.delitem(sys.modules, "jiuwenswarm.common", raising=False)
+    monkeypatch.delitem(sys.modules, "jiuwenswarm.common.utils", raising=False)
     finder = _Finder()
     sys.meta_path.insert(0, finder)
     try:
@@ -262,7 +269,7 @@ def test_setup_logger_at_import_time_reattaches(otel_logger, clean_jiuwenclaw_lo
     assert any(isinstance(f, RedactFilter) for f in ours[0].filters)  # redaction piggybacked
 
 
-def test_rejecting_filter_does_not_drop_log(otel_logger, clean_jiuwenclaw_logger):
+def test_rejecting_filter_does_not_drop_log(otel_logger, clean_jiuwenswarm_logger):
     """Regression: the app's filters include routing/component filters that return False
     (reject records not meant for a specific handler/file). Our handler must run copied
     filters only for side-effects (redaction) and NOT let them drop the log — otherwise
@@ -273,9 +280,9 @@ def test_rejecting_filter_does_not_drop_log(otel_logger, clean_jiuwenclaw_logger
             return False  # simulates a routing filter that rejects
     pre = logging.StreamHandler()
     pre.addFilter(RejectFilter())
-    clean_jiuwenclaw_logger.addHandler(pre)
+    clean_jiuwenswarm_logger.addHandler(pre)
     instrument_logs(otel_logger=lp_logger, level="INFO")
-    logging.getLogger("jiuwenclaw").info("should still be captured")
+    logging.getLogger("jiuwenswarm").info("should still be captured")
     logs = exporter.get_finished_logs()
     assert len(logs) == 1
     assert logs[0].log_record.body == "should still be captured"
