@@ -144,6 +144,25 @@ def _count_tool_definitions(tools, counter):
     return {"total": sum(per_tool.values()), "per_tool": per_tool}
 
 
+_MEMORY_BLOCK_MARKERS = (
+    "[DIALOGUE_MEMORY_BLOCK]",
+    "[CURRENT_ROUND_MEMORY_BLOCK]",
+    "[ROUND_LEVEL_MEMORY_BLOCK]",
+    "[FULL_COMPACT_BOUNDARY]",
+    "[SESSION_MEMORY_BOUNDARY]",
+    "[FULL_COMPACT_STATE]",
+    "[QA_BLOCK_CATALOG]",
+    "<memory-context>",
+)
+
+
+def _is_memory_block(text):
+    """Check if message content starts with a memory-block marker."""
+    if not text:
+        return False
+    return text.startswith(_MEMORY_BLOCK_MARKERS)
+
+
 # --- main entry ---
 
 def record_context_composition(span, metrics, messages, tools, model_name, *, counter=None):
@@ -151,17 +170,21 @@ def record_context_composition(span, metrics, messages, tools, model_name, *, co
     Fail-soft: any failure → no attrs, no raise. Sync (call after LLM returns, before span.end)."""
     try:
         counter = counter or _get_token_counter(model_name)
-        tokens = {"skill": 0, "system": 0, "user": 0, "assistant": 0, "tool": 0}
+        tokens = {"skill": 0, "system": 0, "user": 0, "assistant": 0, "tool": 0, "memory_blocks": 0}
         per_skill = {}  # skill_name -> running token total
         for msg in messages:
             role = getattr(msg, "role", None)
             if role is None and isinstance(msg, dict):
                 role = msg.get("role")
             role = role or "unknown"
-            est = counter.count(_extract_text_content(msg))
+            text = _extract_text_content(msg)
+            est = counter.count(text)
             metadata = getattr(msg, "metadata", None) or {}
             if isinstance(msg, dict):
                 metadata = msg.get("metadata", {}) or {}
+            if _is_memory_block(text):
+                tokens["memory_blocks"] += est
+                continue  # reclassify, not double-counted in role bucket
             is_skill = (
                 (role == "tool" and (metadata.get("is_skill_body") or metadata.get("original_is_skill_body")))
                 or (role == "system" and metadata.get("active_skill_pin"))
@@ -186,6 +209,7 @@ def record_context_composition(span, metrics, messages, tools, model_name, *, co
         span.set_attribute(A.GEN_AI_CONTEXT_ASSISTANT_MESSAGES, tokens["assistant"])
         span.set_attribute(A.GEN_AI_CONTEXT_TOOL_RESULTS, tokens["tool"])
         span.set_attribute(A.GEN_AI_CONTEXT_TOOL_DEFINITIONS, td["total"])
+        span.set_attribute(A.GEN_AI_CONTEXT_MEMORY_BLOCKS, tokens["memory_blocks"])
         span.set_attribute(A.GEN_AI_USAGE_ESTIMATED, True)
         base = {A.GEN_AI_SYSTEM: "jiuwenclaw"}
         base.update(current_request_attrs())

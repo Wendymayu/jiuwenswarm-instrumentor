@@ -134,3 +134,24 @@ def test_tiktoken_counter_count_and_fallback():
     def _boom(text, disallowed_special=()): raise RuntimeError("boom")
     c2 = _TiktokenCounter(types.SimpleNamespace(encode=_boom))
     assert c2.count("hello") == len("hello") // 4
+
+
+def test_memory_block_goes_to_memory_bucket(exporter):
+    """A [DIALOGUE_MEMORY_BLOCK] message → memory_blocks bucket, NOT user_messages."""
+    sp, _ = _run(exporter, [FakeMsg("user", "[DIALOGUE_MEMORY_BLOCK] summarized conversation here")])
+    assert sp.attributes["gen_ai.context.memory_blocks"] == len("[DIALOGUE_MEMORY_BLOCK] summarized conversation here")
+    assert sp.attributes["gen_ai.context.user_messages"] == 0  # not double-counted
+
+
+def test_memory_block_not_in_role_bucket(exporter):
+    """Mixed: normal user + memory block user → memory_blocks only has block, user_messages only has normal."""
+    msgs = [FakeMsg("user", "normal message"), FakeMsg("user", "[FULL_COMPACT_BOUNDARY] compacted")]
+    sp, _ = _run(exporter, msgs)
+    assert sp.attributes["gen_ai.context.memory_blocks"] == len("[FULL_COMPACT_BOUNDARY] compacted")
+    assert sp.attributes["gen_ai.context.user_messages"] == len("normal message")
+
+
+def test_non_memory_block_not_in_memory_bucket(exporter):
+    """Normal message → memory_blocks == 0."""
+    sp, _ = _run(exporter, [FakeMsg("user", "hello")])
+    assert sp.attributes["gen_ai.context.memory_blocks"] == 0
