@@ -125,6 +125,8 @@ channel.request (gateway, root)
 
 ## 未做 / 未来方向
 
+### roadmap 原有
+
 | 方向 | 价值 | 说明 |
 |---|---|---|
 | ReAct 迭代次数(metric) | 高 | 每次 agent.invoke 跑了几轮 think-act;几乎零成本 |
@@ -137,3 +139,19 @@ channel.request (gateway, root)
 | 成本估算($ per request) | 中 | token × 模型价格 → $,需价格表 |
 | session 活跃数(gauge) | 低 | UpDownCounter(create/end 配对) |
 | identity 标签 | 低 | `user.id`/`domain.id`/`app.id`(需 IdentityStore,自包含约束) |
+
+### 2026-06-26 新增
+
+| 方向 | 价值 | 说明 |
+|---|---|---|
+| **端到端用户延迟**(span 属性) | 高 | `channel.request.first_response_ms`:从用户消息进 gateway 到首字返回的总延迟。不是 LLM TTFT(模型推理),而是用户感知的"等了多久才看到字"。channel.request span 加一个属性即可 |
+| **错误分类指标**(Counter) | 高 | `gen_ai.error.count`(by error_type=timeout/invalid_input/upstream/rate_limit/unknown)。span 已有 record_exception,加 Counter + 从 exception type 自动分类。回答"错误主要什么类型、哪个环节最多" |
+| **上下文窗口利用率**(span 属性) | 高 | `gen_ai.context.utilization_ratio = total_context_tokens / model_max_context`。已有 7 桶 token 数,加一个比值属性。>80% 告警"快压缩了" |
+| **对话流指标**(metrics) | 中 | messages per session(Counter/Histogram)+ session duration(Histogram)。已有 session.create/end span,派生很便宜。回答"平均几轮、持续多久" |
+| **工具选择模式**(metrics) | 中 | tool call sequence per request(事件)+ tool failure rate per tool(Counter: tool_name + is_error)。已有 gen_ai.tool span,加 label |
+| **流式吞吐**(span 属性) | 中 | inter-token latency(相邻 chunk 时间差)+ tokens/second(输出 token / 流式时间)。已有 streaming TTFT + output_tokens |
+| **并发指标**(Gauge) | 中 | active sessions(UpDownCounter,create+1/end-1)+ concurrent LLM calls(观察值)。容量规划 |
+| **checkpoint 持久化观测** | 低 | develop 分支有 checkpointer,但日常性能影响小 |
+| **retry/reconnect 指标** | 低 | gateway WS 重连次数、agent 重试次数,边缘场景 |
+| **响应质量信号** | 低(半主观) | finish_reason=length(截断)、用户追问(暗示首次回答不好) |
+| **模型成本 per-agent 归因** | 中 | 成本估算的细化:按 agent_name 拆 token 费用,"哪个 agent 最贵" |
