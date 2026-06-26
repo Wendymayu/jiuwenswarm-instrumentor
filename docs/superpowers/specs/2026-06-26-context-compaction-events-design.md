@@ -24,7 +24,7 @@
 ## 2. 范围
 
 ### 做
-- **ADD 路径(整体)**:wrap `SessionModelContext.add_messages` → buffer 前后 token delta = 纯压缩(ADD processor 链直接改 buffer,无截断混入)。一个事件/次 `add_messages` 调用。
+- **ADD 路径(整体)**:wrap `SessionModelContext.add_messages` → buffer 前后 token delta = **NET(净)delta**(压缩移除 − 新增追加;`add_messages` 在 processor 链后 `add_back` 新消息,故 delta 非纯压缩,当新增>压缩时 `after>=before` 会漏掉压缩事件。**已知限制**,GET 路径不受影响、是 gross)。一个事件/次 `add_messages` 调用。
 - **GET 路径(per-processor)**:wrap 3 个 GET processor(`FullCompactProcessor`/`RoundLevelCompressor`/`ToolResultDedupProcessor`)的 `on_get_context_window` → 该 processor 压前/压后 window token delta = 纯压缩。一个事件/processor 触发。
 - 每次真压缩(tokens_saved>0)出 `context.compaction` span + 2 metric。
 - ADD 整体无 processor_type(GET 才有,因 GET per-processor)。
@@ -40,7 +40,7 @@
 
 ## 3. 设计原则
 
-- **ADD 整体 + GET per-processor(混合)**:ADD 改 buffer(前后快照纯压缩,整体即可);GET 改 window 副本(wrapper 够不着压前 window,只能 per-processor 拿该 processor 压前/压后)。
+- **ADD 整体 + GET per-processor(混合)**:ADD 改 buffer(前后快照是 **NET delta**,非纯压缩 — 已知限制,见 §2);GET 改 window 副本(wrapper 够不着压前 window,只能 per-processor 拿该 processor 压前/压后,是 **gross**)。
 - **只在真压缩时出**:tokens_saved>0 才出 span/metric,零压缩零开销。
 - **用引擎的 token_counter**:`context.token_counter().count_messages(...)`,和引擎账本一致(不用我们自己的 `_get_token_counter`,避免 mismatch)。
 - **span 挂 agent.invoke 下**:压缩在 ReAct 循环内、gen_ai.chat 之外;agent.invoke 是 current → `context.compaction` 作其子 span(经 OTel current context 自动嵌套)。不挂 gen_ai.chat(压缩时它不 active)。

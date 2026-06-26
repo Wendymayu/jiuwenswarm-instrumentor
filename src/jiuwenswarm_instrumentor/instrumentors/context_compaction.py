@@ -86,9 +86,10 @@ def instrument_context_compaction(tracer, metrics, *, session_context_cls=None, 
     if session_context_cls is not None:
         def factory_add(original):
             async def traced(self, *args, **kw):
-                # ADD 整体:buffer 前后 delta = 纯压缩(ADD processor 链直接改 buffer)。
-                # 注意:delta 会 net 掉新追加的 messages_to_add(它们在 processor 链后 add_back),
-                # 所以 tokens_saved 是"整体"近似(spec §2),不是纯压缩 savings。
+                # ADD 整体:buffer 前后 delta。注意这是 NET(净)delta,不是纯压缩 savings ——
+                # add_messages 在 processor 链后会 add_back 新追加的消息,所以
+                # tokens_saved = 压缩移除 - 新增追加。当新增 > 压缩时 after >= before,
+                # 压缩事件会被漏掉(已知限制,GET 路径不受影响、是 gross)。
                 bt = _count(self, self.get_messages())
                 bm = len(self.get_messages() or [])
                 result = await original(self, *args, **kw)  # IrreducibleContextError 透传

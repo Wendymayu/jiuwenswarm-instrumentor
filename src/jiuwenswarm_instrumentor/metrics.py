@@ -59,7 +59,7 @@ class Metrics:
         )
         self._context_compaction_tokens_saved = meter.create_histogram(
             "gen_ai.context.compaction.tokens_saved", unit="{token}",
-            description="Tokens saved per context compaction, by path+processor_type",
+            description="Tokens saved per context compaction (GET=gross, ADD=net approx), by path+processor_type",
         )
 
     def record_token_usage(self, input_tokens, output_tokens, attrs):
