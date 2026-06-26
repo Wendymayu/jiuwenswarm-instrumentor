@@ -125,15 +125,12 @@ channel.request (gateway, root)
 
 ## 未做 / 未来方向
 
+> 注:以下仅列**需要新代码、无法从已采集数据派生**的项。prompt cache 命中率、成本估算、session 活跃数、端到端延迟、错误分类、对话流、工具选择模式、流式吞吐、并发、响应质量、per-agent 成本、LLM 成功率、模型分布、流式完成率、工具结果大小等均可由后端从已有 span 属性/metric 直接计算,不在列表内。
+
 | 方向 | 价值 | 说明 |
 |---|---|---|
-| ReAct 迭代次数(metric) | 高 | 每次 agent.invoke 跑了几轮 think-act;几乎零成本 |
-| reasoning tokens(span 属性) | 高 | 推理模型的 `gen_ai.usage.reasoning.output_tokens`(常量已在,`_record_usage` 没记) |
-| per-channel 指标 label | 中 | `jiuwenclaw.channel.id` 加到 token/duration metric 的 label |
-| prompt cache 命中率 | 中 | `cache_read.input_tokens` 已记,派生命中率 |
-| ADD-path gross tokens_saved | 中 | 当前是 NET(压缩 - 新增),可加 added-back 计数 → gross |
+| per-channel 指标 label | 中 | gateway wrap 加 `set_request_context(channel_id=...)` → 下游 metric label 自动带 channel_id(2 行改动) |
+| ADD-path gross tokens_saved | 中 | 当前是 NET(压缩 - 新增),需单独数 `add_back` 的 token → gross |
 | Session memory CRUD 事件 | 中 | wrap `SessionMemoryManager` 的 update/commit |
 | External LTM CRUD/recall | 低(默认关) | wrap `LongTermMemory`(LTM `engine: none` 默认关) |
-| 成本估算($ per request) | 中 | token × 模型价格 → $,需价格表 |
-| session 活跃数(gauge) | 低 | UpDownCounter(create/end 配对) |
 | identity 标签 | 低 | `user.id`/`domain.id`/`app.id`(需 IdentityStore,自包含约束) |
