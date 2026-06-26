@@ -107,3 +107,48 @@ async def test_invoke_exception_sets_error_and_reraises(exporter):
     span = exporter.spans[0]
     assert span.name == "gen_ai.chat"
     assert span.status.status_code == StatusCode.ERROR
+
+
+async def test_session_memory_update_labeled(exporter):
+    """System prompt starting with 'You are a session memory updater' → gen_ai.operation.name=session_memory_update."""
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+    Fake = _make_fake_client_cls()
+    instrument_llm(tracer, metrics, log_messages=False, model_client_cls=Fake)
+    messages = [
+        {"role": "system", "content": "You are a session memory updater. Your only task is to update a markdown notes file."},
+        {"role": "user", "content": "update"},
+    ]
+    await Fake().invoke(messages)
+    span = exporter.spans[0]
+    assert span.attributes["gen_ai.operation.name"] == "session_memory_update"
+
+
+async def test_full_compact_summary_labeled(exporter):
+    """System prompt starting with 'Your task is to create a detailed summary' → gen_ai.operation.name=full_compact_summary."""
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+    Fake = _make_fake_client_cls()
+    instrument_llm(tracer, metrics, log_messages=False, model_client_cls=Fake)
+    messages = [
+        {"role": "system", "content": "Your task is to create a detailed summary of the conversation so far."},
+        {"role": "user", "content": "summarize"},
+    ]
+    await Fake().invoke(messages)
+    span = exporter.spans[0]
+    assert span.attributes["gen_ai.operation.name"] == "full_compact_summary"
+
+
+async def test_normal_chat_not_labeled(exporter):
+    """Normal system prompt → gen_ai.operation.name stays 'chat' (default)."""
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+    Fake = _make_fake_client_cls()
+    instrument_llm(tracer, metrics, log_messages=False, model_client_cls=Fake)
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "hi"},
+    ]
+    await Fake().invoke(messages)
+    span = exporter.spans[0]
+    assert span.attributes["gen_ai.operation.name"] == "chat"

@@ -135,6 +135,27 @@ def _record_usage(span, metrics, result, model, provider):
     metrics.record_token_usage(inp, out, base)
 
 
+_MEMORY_OP_PROMPTS = (
+    ("You are a session memory updater", "session_memory_update"),
+    ("Your task is to create a detailed summary", "full_compact_summary"),
+)
+
+
+def _detect_memory_operation(messages):
+    """Sniff system prompt prefix → return operation name or None. Fail-soft."""
+    try:
+        for msg in messages or []:
+            if _msg_role(msg) == "system":
+                content = _msg_content(msg)
+                for prefix, op_name in _MEMORY_OP_PROMPTS:
+                    if content.startswith(prefix):
+                        return op_name
+                break  # only first system message
+    except Exception:
+        pass
+    return None
+
+
 def instrument_llm(tracer, metrics, *, log_messages=False, message_max_length=4096, model_client_cls=None):
     """Wrap OpenAIModelClient.invoke + .stream (openjiuwen 0.1.10)."""
     if model_client_cls is None:
@@ -148,6 +169,9 @@ def instrument_llm(tracer, metrics, *, log_messages=False, message_max_length=40
             provider = _resolve_provider(self)
             mdl = _resolve_model(self, model)
             attrs = _common_attrs(self, mdl, provider)
+            _op = _detect_memory_operation(messages)
+            if _op:
+                attrs[A.GEN_AI_OPERATION_NAME] = _op
             start = time.monotonic()
             with tracer.start_as_current_span("gen_ai.chat", kind=SpanKind.CLIENT, attributes=attrs) as span:
                 if log_messages:
@@ -184,6 +208,9 @@ def instrument_llm(tracer, metrics, *, log_messages=False, message_max_length=40
             mdl = _resolve_model(self, model)
             attrs = _common_attrs(self, mdl, provider)
             attrs[A.GEN_AI_REQUEST_STREAMING] = True
+            _op = _detect_memory_operation(messages)
+            if _op:
+                attrs[A.GEN_AI_OPERATION_NAME] = _op
             start = time.monotonic()
             # NOT start_as_current_span: we don't keep this span current during the async
             # iteration, so the caller's (agent's) mid-stream tool execution does NOT nest
