@@ -2,7 +2,7 @@
 from __future__ import annotations
 import logging
 
-from jiuwenswarm_instrumentor.instrumentors import llm, tool, agent, session, logs, gateway, agentserver, context_compaction
+from jiuwenswarm_instrumentor.instrumentors import llm, tool, agent, session, logs, gateway, agentserver, context_compaction, subagent
 from jiuwenswarm_instrumentor.metrics import Metrics
 
 logger = logging.getLogger("jiuwenswarm_instrumentor")
@@ -51,3 +51,8 @@ def apply_instrumentors(tracer, meter, cfg):
             logger.info("[instrumentor] applied context_compaction")
         except Exception:
             logger.exception("[instrumentor] failed to apply context_compaction — skipping")
+        try:
+            subagent.instrument_subagent(tracer, metrics)
+            logger.info("[instrumentor] applied subagent")
+        except Exception:
+            logger.exception("[instrumentor] failed to apply subagent — skipping")
