@@ -53,6 +53,14 @@ class Metrics:
             "gen_ai.tool.token.usage", unit="{token}",
             description="Tool-definition tokens in context, by tool",
         )
+        self._context_compaction_count = meter.create_counter(
+            "gen_ai.context.compaction.count", unit="{event}",
+            description="Context compaction episodes, by path+processor_type",
+        )
+        self._context_compaction_tokens_saved = meter.create_histogram(
+            "gen_ai.context.compaction.tokens_saved", unit="{token}",
+            description="Tokens saved per context compaction, by path+processor_type",
+        )
 
     def record_token_usage(self, input_tokens, output_tokens, attrs):
         try:
@@ -110,3 +118,10 @@ class Metrics:
             self._tool_token_usage.add(int(tokens or 0), attrs)
         except Exception:
             logger.debug("[instrumentor] tool token usage metric failed", exc_info=True)
+
+    def record_context_compaction(self, count, tokens_saved, attrs):
+        try:
+            self._context_compaction_count.add(int(count or 0), attrs)
+            self._context_compaction_tokens_saved.record(int(tokens_saved or 0), attrs)
+        except Exception:
+            logger.debug("[instrumentor] context compaction metric failed", exc_info=True)

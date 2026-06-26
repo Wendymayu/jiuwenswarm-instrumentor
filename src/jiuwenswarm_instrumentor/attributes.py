@@ -41,3 +41,13 @@ JIUWENCLAW_CHANNEL_ID = "jiuwenclaw.channel.id"
 JIUWENCLAW_REQUEST_ID = "jiuwenclaw.request.id"
 JIUWENCLAW_AGENT_NAME = "jiuwenclaw.agent.name"
 JIUWENCLAW_DOMAIN_ID = "jiuwenclaw.domain.id"
+
+# context compaction dimensions
+GEN_AI_CONTEXT_COMPACTION_PATH = "context.compaction.path"
+GEN_AI_CONTEXT_COMPACTION_PROCESSOR_TYPE = "context.compaction.processor_type"
+GEN_AI_CONTEXT_COMPACTION_TOKENS_BEFORE = "context.compaction.tokens_before"
+GEN_AI_CONTEXT_COMPACTION_TOKENS_AFTER = "context.compaction.tokens_after"
+GEN_AI_CONTEXT_COMPACTION_TOKENS_SAVED = "context.compaction.tokens_saved"
+GEN_AI_CONTEXT_COMPACTION_MESSAGES_BEFORE = "context.compaction.messages_before"
+GEN_AI_CONTEXT_COMPACTION_MESSAGES_AFTER = "context.compaction.messages_after"
+JIUWENCLAW_CONTEXT_ID = "jiuwenclaw.context.id"

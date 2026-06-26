@@ -62,3 +62,22 @@ def test_token_usage_record_failsoft():
     m._tool_token_usage.add.side_effect = RuntimeError("boom")
     m.record_skill_token_usage(5, {"gen_ai.skill.name": "s"})  # must not raise
     m.record_tool_token_usage(3, {"gen_ai.tool.name": "t"})    # must not raise
+
+
+def test_context_compaction_counters_created():
+    from unittest.mock import Mock
+    meter = Mock()
+    Metrics(meter)
+    names = [c.args[0] for c in meter.create_counter.call_args_list]
+    hists = [h.args[0] for h in meter.create_histogram.call_args_list]
+    assert "gen_ai.context.compaction.count" in names
+    assert "gen_ai.context.compaction.tokens_saved" in hists
+
+
+def test_context_compaction_record_failsoft():
+    from unittest.mock import Mock
+    meter = Mock()
+    m = Metrics(meter)
+    m._context_compaction_count.add.side_effect = RuntimeError("boom")
+    m._context_compaction_tokens_saved.record.side_effect = RuntimeError("boom")
+    m.record_context_compaction(1, 50, {"context.compaction.path": "ADD"})  # must not raise
