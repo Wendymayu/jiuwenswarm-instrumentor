@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 
 from jiuwenswarm_instrumentor import attributes as A
-from jiuwenswarm_instrumentor.context import set_request_context, current_request_attrs
+from jiuwenswarm_instrumentor.context import set_request_context, current_request_attrs, _react_counter
 from jiuwenswarm_instrumentor.wrap import patch_method
 from opentelemetry.trace import StatusCode, SpanKind
 
@@ -39,6 +39,7 @@ def instrument_agent(tracer, metrics, *, agent_cls=None):
             }
             attrs.update(current_request_attrs())
             start = time.monotonic()
+            react_token = _react_counter.set(0)
             try:
                 with tracer.start_as_current_span("jiuwenclaw.agent.invoke", kind=SpanKind.INTERNAL, attributes=attrs) as span:
                     try:
@@ -48,13 +49,15 @@ def instrument_agent(tracer, metrics, *, agent_cls=None):
                             span.set_status(StatusCode.ERROR)
                         else:
                             span.set_status(StatusCode.OK)
+                        span.set_attribute(A.JIUWENCLAW_AGENT_ITERATIONS, _react_counter.get() or 0)
                         return result
                     except Exception as exc:
                         span.set_status(StatusCode.ERROR, str(exc)[:256])
                         span.record_exception(exc)
+                        span.set_attribute(A.JIUWENCLAW_AGENT_ITERATIONS, _react_counter.get() or 0)
                         raise
             finally:
-                # reset context first (guaranteed), then record (fail-soft in Metrics)
+                _react_counter.reset(react_token)
                 ctx_token.reset()
                 metrics.record_agent_duration(time.monotonic() - start,
                                                {A.GEN_AI_AGENT_NAME: agent_name})

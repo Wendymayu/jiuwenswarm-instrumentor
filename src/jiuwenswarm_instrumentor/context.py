@@ -6,6 +6,10 @@ from jiuwenswarm_instrumentor import attributes as A
 
 _request_context: ContextVar[dict | None] = ContextVar("jiuwenswarm_request_context", default=None)
 
+# ReAct iteration counter — set to 0 by agent.invoke wrap, incremented by llm wrap.
+# None when not inside an agent.invoke (e.g., standalone LLM calls, memory updates).
+_react_counter: ContextVar[int | None] = ContextVar("jiuwenswarm_react_counter", default=None)
+
 
 class _RequestContextToken:
     """Handle returned by :func:`set_request_context`.
@@ -48,3 +52,10 @@ def set_request_context(*, session_id=None, channel_id=None, request_id=None, ag
 def current_request_attrs() -> dict:
     """Return a copy of the current request context attrs (empty dict if unset)."""
     return dict(_request_context.get() or {})
+
+
+def increment_react_counter():
+    """Increment the ReAct iteration counter if inside an agent.invoke (no-op otherwise)."""
+    c = _react_counter.get()
+    if c is not None:
+        _react_counter.set(c + 1)

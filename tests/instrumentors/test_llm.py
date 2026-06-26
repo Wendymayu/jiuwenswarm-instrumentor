@@ -109,6 +109,33 @@ async def test_invoke_exception_sets_error_and_reraises(exporter):
     assert span.status.status_code == StatusCode.ERROR
 
 
+async def test_reasoning_tokens_recorded(exporter):
+    """Reasoning tokens from usage_metadata → gen_ai.usage.reasoning.output_tokens span attr."""
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+    class _UsageR:
+        input_tokens = 100; output_tokens = 50; total_tokens = 200; cache_tokens = 0
+        reasoning_tokens = 42
+    class _AssistantR:
+        content = "hi"; usage_metadata = _UsageR(); finish_reason = "stop"
+        tool_calls = None; reasoning_content = None
+    class _ModelConfig:
+        model_name = "o1"; temperature = 0.7; top_p = None
+    class _ClientConfig:
+        client_provider = "OpenAI"
+    class FakeR:
+        model_config = _ModelConfig()
+        model_client_config = _ClientConfig()
+        async def invoke(self, messages, *, tools=None, temperature=None, top_p=None,
+                        model=None, max_tokens=None, stop=None, output_parser=None,
+                        timeout=None, **kw):
+            return _AssistantR()
+    instrument_llm(tracer, metrics, model_client_cls=FakeR)
+    await FakeR().invoke([{"role": "user", "content": "hi"}])
+    span = exporter.spans[0]
+    assert span.attributes["gen_ai.usage.reasoning.output_tokens"] == 42
+
+
 async def test_session_memory_update_labeled(exporter):
     """System prompt starting with 'You are a session memory updater' → gen_ai.operation.name=session_memory_update."""
     tracer = trace.get_tracer("t")

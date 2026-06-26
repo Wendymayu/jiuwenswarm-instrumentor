@@ -5,7 +5,7 @@ import time
 import types
 
 from jiuwenswarm_instrumentor import attributes as A
-from jiuwenswarm_instrumentor.context import current_request_attrs
+from jiuwenswarm_instrumentor.context import current_request_attrs, increment_react_counter
 from jiuwenswarm_instrumentor.instrumentors.context_tokens import record_context_composition
 from jiuwenswarm_instrumentor.wrap import patch_method
 from opentelemetry.trace import StatusCode, SpanKind
@@ -127,11 +127,14 @@ def _record_usage(span, metrics, result, model, provider):
     out = getattr(usage, "output_tokens", 0) or 0
     total = getattr(usage, "total_tokens", 0) or (inp + out)
     cache = getattr(usage, "cache_tokens", 0) or 0
+    reasoning = getattr(usage, "reasoning_tokens", 0) or getattr(usage, "reasoning_output_tokens", 0) or 0
     span.set_attribute(A.GEN_AI_USAGE_INPUT_TOKENS, inp)
     span.set_attribute(A.GEN_AI_USAGE_OUTPUT_TOKENS, out)
     span.set_attribute(A.GEN_AI_USAGE_TOTAL_TOKENS, total)
     if cache:
         span.set_attribute(A.GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS, cache)
+    if reasoning:
+        span.set_attribute(A.GEN_AI_USAGE_REASONING_OUTPUT_TOKENS, reasoning)
     metrics.record_token_usage(inp, out, base)
 
 
@@ -166,6 +169,7 @@ def instrument_llm(tracer, metrics, *, log_messages=False, message_max_length=40
         async def traced_invoke(self, messages, *, tools=None, temperature=None, top_p=None,
                                 model=None, max_tokens=None, stop=None, output_parser=None,
                                 timeout=None, **kw):
+            increment_react_counter()
             provider = _resolve_provider(self)
             mdl = _resolve_model(self, model)
             attrs = _common_attrs(self, mdl, provider)
