@@ -25,7 +25,9 @@ def activate() -> bool:
         logger.info("[instrumentor] OTEL_ENABLED not set — instrumentation disabled")
         return False
     try:
+        from jiuwenswarm_instrumentor.model_context import sync_model_context
         init_providers(cfg)
+        sync_model_context()
         apply_instrumentors(trace.get_tracer("jiuwenswarm_instrumentor"),
                             metrics.get_meter("jiuwenswarm_instrumentor"), cfg)
         _APPLIED = True

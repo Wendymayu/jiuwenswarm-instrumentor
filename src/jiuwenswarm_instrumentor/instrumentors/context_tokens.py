@@ -210,6 +210,12 @@ def record_context_composition(span, metrics, messages, tools, model_name, *, co
         span.set_attribute(A.GEN_AI_CONTEXT_TOOL_RESULTS, tokens["tool"])
         span.set_attribute(A.GEN_AI_CONTEXT_TOOL_DEFINITIONS, td["total"])
         span.set_attribute(A.GEN_AI_CONTEXT_MEMORY_BLOCKS, tokens["memory_blocks"])
+        total = sum(tokens.values()) + td["total"]
+        span.set_attribute(A.GEN_AI_CONTEXT_TOTAL_TOKENS, total)
+        from jiuwenswarm_instrumentor.model_context import get_max_context
+        max_ctx = get_max_context(model_name)
+        if max_ctx and max_ctx > 0:
+            span.set_attribute(A.GEN_AI_CONTEXT_UTILIZATION_RATIO, round(total / max_ctx, 4))
         span.set_attribute(A.GEN_AI_USAGE_ESTIMATED, True)
         base = {A.GEN_AI_SYSTEM: "jiuwenclaw"}
         base.update(current_request_attrs())

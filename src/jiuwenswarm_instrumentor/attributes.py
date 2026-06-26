@@ -55,3 +55,7 @@ JIUWENCLAW_CONTEXT_ID = "jiuwenclaw.context.id"
 # agent iteration count
 JIUWENCLAW_AGENT_ITERATIONS = "jiuwenclaw.agent.iterations"
 GEN_AI_CONTEXT_MEMORY_BLOCKS = "gen_ai.context.memory_blocks"
+
+# context utilization
+GEN_AI_CONTEXT_TOTAL_TOKENS = "gen_ai.context.total_tokens"
+GEN_AI_CONTEXT_UTILIZATION_RATIO = "gen_ai.context.utilization_ratio"
