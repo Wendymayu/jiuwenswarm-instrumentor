@@ -183,3 +183,29 @@ async def test_irreducible_propagates(exporter):
     assert raised  # 透传,不吞
     spans = [s for s in exporter.spans if s.name == "context.compaction"]
     assert len(spans) == 0  # 异常 → 不 emit
+
+
+async def test_multiple_get_processors_both_compress(exporter):
+    """Two compressing GET processors → 2 spans with distinct processor_type."""
+    tracer = trace.get_tracer("t")
+    fm = FakeMetrics()
+    class FakeGetProcA:
+        def processor_type(self): return "ProcA"
+        async def on_get_context_window(self, context, context_window, **kw):
+            context_window.messages = context_window.messages[:len(context_window.messages) // 2]
+            return None, context_window
+    class FakeGetProcB:
+        def processor_type(self): return "ProcB"
+        async def on_get_context_window(self, context, context_window, **kw):
+            context_window.messages = context_window.messages[:len(context_window.messages) // 2]
+            return None, context_window
+    instrument_context_compaction(tracer, fm, session_context_cls=None, processor_classes=[FakeGetProcA, FakeGetProcB])
+    ctx = FakeSessionContext()
+    w = FakeWindow([FakeMsg("tool", "hello"), FakeMsg("tool", "worldxx")])
+    await FakeGetProcA().on_get_context_window(ctx, w)
+    w2 = FakeWindow([FakeMsg("tool", "hello"), FakeMsg("tool", "worldxx")])
+    await FakeGetProcB().on_get_context_window(ctx, w2)
+    spans = [s for s in exporter.spans if s.name == "context.compaction"]
+    assert len(spans) == 2
+    types = {sp.attributes["context.compaction.processor_type"] for sp in spans}
+    assert types == {"ProcA", "ProcB"}

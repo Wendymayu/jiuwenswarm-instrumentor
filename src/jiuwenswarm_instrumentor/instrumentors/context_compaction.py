@@ -2,7 +2,7 @@
 from __future__ import annotations
 import logging
 
-from opentelemetry.trace import SpanKind
+from opentelemetry.trace import SpanKind, StatusCode
 
 from jiuwenswarm_instrumentor import attributes as A
 from jiuwenswarm_instrumentor.wrap import patch_method
@@ -63,8 +63,8 @@ def _emit(tracer, metrics, context, *, path, processor_type, before_tokens, afte
             A.JIUWENCLAW_SESSION_ID: _sid(context),
             A.JIUWENCLAW_CONTEXT_ID: _cid(context),
         }
-        with tracer.start_as_current_span("context.compaction", kind=SpanKind.INTERNAL, attributes=attrs):
-            pass
+        with tracer.start_as_current_span("context.compaction", kind=SpanKind.INTERNAL, attributes=attrs) as span:
+            span.set_status(StatusCode.OK)
         mattrs = {A.GEN_AI_CONTEXT_COMPACTION_PATH: path,
                   A.GEN_AI_CONTEXT_COMPACTION_PROCESSOR_TYPE: processor_type,
                   A.GEN_AI_SYSTEM: "jiuwenclaw"}
@@ -85,10 +85,13 @@ def instrument_context_compaction(tracer, metrics, *, session_context_cls=None, 
             session_context_cls = None
     if session_context_cls is not None:
         def factory_add(original):
-            async def traced(self, messages_to_add, **kw):
+            async def traced(self, *args, **kw):
+                # ADD 整体:buffer 前后 delta = 纯压缩(ADD processor 链直接改 buffer)。
+                # 注意:delta 会 net 掉新追加的 messages_to_add(它们在 processor 链后 add_back),
+                # 所以 tokens_saved 是"整体"近似(spec §2),不是纯压缩 savings。
                 bt = _count(self, self.get_messages())
                 bm = len(self.get_messages() or [])
-                result = await original(self, messages_to_add, **kw)  # IrreducibleContextError 透传
+                result = await original(self, *args, **kw)  # IrreducibleContextError 透传
                 at = _count(self, self.get_messages())
                 am = len(self.get_messages() or [])
                 if at < bt:
