@@ -1,10 +1,12 @@
-jiuwenswarm 智能体的可观测数据采集器
+jiuwenswarm 智能体的可观测数据采集器 —— 独立、自包含的 OpenTelemetry 自动插桩，为 jiuwenclaw / openjiuwen 多通道 AI Agent 采集 traces + metrics，经 OTLP 导出至任意标准可观测后端（Arize Phoenix / Langfuse / 自托管 labubu，三者同讲 OTLP，仅端点不同）。
 
 ## 安装
 
 ```bash
-cd jiuwenswarm-instrumentor && pip install -e .
+pip install jiuwenswarm-instrumentor
 ```
+
+> 注：本机默认 `python` 为 3.14，本包 `requires-python = ">=3.11,<3.14"`，请用 Python 3.11–3.13（如 `py -3.13`）。
 
 ## 使用（无侵入）
 
@@ -44,8 +46,14 @@ import jiuwenswarm_instrumentor; jiuwenswarm_instrumentor.setup()
 
 ## 采集的信号
 
-- **Traces**：`gen_ai.chat`（LLM 调用，含 token 用量、TTFT）、`gen_ai.tool`（工具执行）、`jiuwenclaw.agent.invoke`（Agent 调用）、`jiuwenclaw.session.create` / `jiuwenclaw.session.end`（会话生命周期）。
-- **Metrics**：`gen_ai.client.token.usage`、`gen_ai.client.operation.duration`、`gen_ai.tool.count` / `gen_ai.tool.duration`、`gen_ai.agent.duration`。
+- **Traces**：
+  - `gen_ai.chat`（LLM 调用，含 token 用量、TTFT、上下文构成）
+  - `gen_ai.tool`（工具执行）
+  - `jiuwenclaw.agent.invoke`（Agent 调用，含 ReAct 迭代次数、reasoning tokens）
+  - `jiuwenclaw.subagent.invoke`（子 Agent 调用，含正确 agent_name 与迭代数）
+  - `jiuwenclaw.session.create` / `jiuwenclaw.session.end`（会话生命周期）
+  - `gen_ai.context.compaction` / `gen_ai.context.memory_blocks`（上下文压缩与记忆块 token 桶）
+- **Metrics**：`gen_ai.client.token.usage`、`gen_ai.client.operation.duration`、`gen_ai.tool.count` / `gen_ai.tool.duration`、`gen_ai.agent.duration`、上下文压缩次数 / `tokens_saved`。
 - 语义约定遵循 OTel GenAI semconv（`gen_ai.*`）+ 自定义 `jiuwenclaw.*` 维度。
 
 ## 手动冒烟（smoke）
