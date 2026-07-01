@@ -11,17 +11,28 @@
 
 ## 1. 一次性 setup(三个动作,均未提交到 jiuwenswarm)
 
-### 1.1 把 instrumentor 装进 jiuwenclaw 的 venv(editable)
+### 1.1 把 instrumentor 装进 jiuwenclaw 的 venv
+
+**推荐:非 editable 安装(发货 `.pth` 自动加载钩子,split-process 一条命令搞定)**
 
 ```bash
 cd D:/code/opensource/gitcode/jiuwenswarm
-.venv_enterprise_dev/Scripts/python.exe -m pip install -e D:/code/opensource/github/jiuwenswarm-instrumentor
+.venv_enterprise_dev/Scripts/python.exe -m pip install D:/code/opensource/github/jiuwenswarm-instrumentor
+# 验证 .pth 落位
+ls .venv_enterprise_dev/Lib/site-packages/ | grep jiuwenswarm_instrumentor.pth
 # 验证
-.venv_enterprise_dev/Scripts/python.exe -c "import jiuwenswarm_instrumentor as j; print(j.__version__)"
-# 应输出 0.1.0
+.venv_enterprise_dev/Scripts/python.exe -c "import jiuwenswarm_instrumentor as j; print(j.__version__)"   # 0.1.0
 ```
 
-editable 安装 → 之后改 instrumentor 源码无需重装,重启进程即生效。
+装上后,`OTEL_ENABLED=true` 时**任何** `python` 进程(含 `app.py` fork 的 agentserver/gateway 子进程)启动即自动激活,无需 `jiuwen-instrument` 包裹、无需改 jiuwenclaw 源码。详见 `docs/observability-quickstart.md` 方式 A。
+
+**替代:editable 安装(改 instrumentor 源码不重装即生效,但不发货 `.pth`,autoload 不生效)**
+
+```bash
+.venv_enterprise_dev/Scripts/python.exe -m pip install -e D:/code/opensource/github/jiuwenswarm-instrumentor
+```
+
+editable 下要走 2.2/2.3 的两终端 `jiuwen-instrument` 方式,或自配 `PYTHONPATH`+`sitecustomize.py`。
 
 ### 1.2 禁用 jiuwenclaw 自带的旧 telemetry(避免双写)
 
@@ -42,7 +53,7 @@ jiuwenclaw 内置的 `jiuwenclaw/telemetry/` 还在、且会被 `app_agentserver
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5173/src/hooks/useWebSocket.ts  # 200 = OK
 ```
 
-## 2. 启动(三个后台进程)
+## 2. 启动
 
 ### 2.1 环境变量(三个进程共用)
 
@@ -59,17 +70,28 @@ export OTEL_LOGS_LEVEL=INFO                 # 采集级别 (DEBUG 会爆量)
 # 可选: export OTEL_LOGS_EXCLUDED_LOGGERS=jiuwenclaw.interface.resp
 ```
 
-### 2.2 AgentServer(终端 1,被插桩)
+### 2.2 一条命令启动(推荐 —— 用 1.1 非 editable 安装的 .pth 自动加载)
 
 ```bash
 cd D:/code/opensource/gitcode/jiuwenswarm
+.venv_enterprise_dev/Scripts/python.exe -m jiuwenclaw.app
+```
+
+`app.py` 会 fork `app_agentserver` + `app_gateway` 两个子进程,各自启动时 `.pth` 自动跑 `_autoload` → `activate()`,早于 agent 构造。三个进程(父 + 两子)各自向 labubu 发 span。Web 前端另起(见 2.4)。
+
+> 这是 split-process 唯一能一条命令搞定的方式。`jiuwen-instrument jiuwenclaw.app` 不行 —— CLI 只包裹父进程,子进程不被插桩。
+
+### 2.3 两终端手动启动(替代 —— editable 安装或想单独看某进程日志时用)
+
+AgentServer(终端 1):
+
+```bash
 .venv_enterprise_dev/Scripts/jiuwen-instrument.exe jiuwenclaw.app_agentserver
 ```
 
-### 2.3 Gateway(终端 2,被插桩,AgentServer 起来后再起)
+Gateway(终端 2,AgentServer 起来后再起):
 
 ```bash
-cd D:/code/opensource/gitcode/jiuwenswarm
 .venv_enterprise_dev/Scripts/jiuwen-instrument.exe jiuwenclaw.app_gateway
 ```
 
@@ -80,7 +102,7 @@ cd D:/code/opensource/gitcode/jiuwenswarm/jiuwenclaw/web_enterprise
 npm run dev   # vite,默认 :5173
 ```
 
-> ⚠️ **不能用 `jiuwen-instrument jiuwenclaw-app` 一条命令**:app.py 会用裸 `sys.executable` fork agentserver/gateway 子进程,子进程不被插桩。所以拆成两条 `jiuwen-instrument` 直接起 agentserver + gateway。要一条命令搞定,得在 venv 装 `sitecustomize` 自动激活(会给 venv 加启动钩子,需你授权;见下"附录")。
+> ⚠️ **不能用 `jiuwen-instrument jiuwenclaw.app` 一条命令**:CLI 只包裹父进程,`app.py` fork 的 agentserver/gateway 子进程不被插桩。一条命令搞定要用 2.2 的 `.pth` 自动加载(非 editable 安装即自带)。要单独看某进程日志,用 2.3 两终端方式。
 
 ## 3. 验证
 
@@ -124,21 +146,26 @@ agent/LLM/tool 执行期间的日志带 trace_id(挂在 trace 下);网关路由�
 - **labubu Logs 页没数据**:确认 `OTEL_LOGS_EXPORTER=otlp`(默认 `none` 不采);确认 labubu `POST /v1/logs` 可达(`curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:4318/v1/logs` 应 200)。`OTEL_LOGS_LEVEL=DEBUG` 会爆量,默认 INFO。注意 labubu 每 5min 清理无 trace 关联的日志(启动日志 `trace_id=0` 会被清)——5min 内查,或发 chat 消息让日志带 trace_id(被关联保留)。若 agentserver 日志全空而 gateway 有,多半是 filter 复用把路由 filter 也拷了导致记录被拒——详见 `docs/troubleshooting/logs-dropped-by-app-routing-filters.md`。
 - **日志里没 prompt 等敏感字段被脱敏**:正常 —— instrumentor 复用了 jiuwenclaw 自有的 `SensitiveDataFilter`(从 `jiuwenclaw` logger 已有 handler 复制);若 jiuwenclaw 没装 filter,instrumentor 回退到 WARNING-only(不发 INFO)。
 
-## 附录:sitecustomize 自动激活(一条命令启动,需授权)
+## 附录:自动加载机制说明(.pth,已内置)
 
-在 `.venv_enterprise_dev/Lib/site-packages/sitecustomize.py` 放(给 venv 加启动钩子,会被分类器标记为持久化,需你明确授权):
+非 editable `pip install .` 会在 site-packages 落一个 `jiuwenswarm_instrumentor.pth`,内容是单行 `import jiuwenswarm_instrumentor._autoload`。CPython 在每个 Python 进程启动时执行该行 → `_autoload._autoload()` → `activate()`。gating:
 
-```python
-import os
-if os.getenv("OTEL_ENABLED", "").strip().lower() in ("true", "1", "yes"):
-    try:
-        from jiuwenswarm_instrumentor import setup
-        setup()
-    except Exception:
-        pass
+- `OTEL_ENABLED=true` 才真正激活(否则 `_autoload` 立即 return,零开销)。
+- `JIUWENSWARM_INSTRUMENT_AUTOLOAD=false`(`0`/`no`/`off`)显式 opt-out,即使 `OTEL_ENABLED=true` 也不自动激活(改用 CLI/代码激活时用)。
+- 任何激活异常被吞掉,绝不影响业务进程。
+
+这就是 2.2 一条命令能覆盖 split-process 子进程的原理。不再需要手动往 venv 放 `sitecustomize.py`。editable 安装不发货此 `.pth`,需走 2.3 或自配 `PYTHONPATH`+`sitecustomize.py`(内容同旧版:`os.getenv("OTEL_ENABLED")=="true"` 时 `from jiuwenswarm_instrumentor import setup; setup()`)。
+
+实测验证(在 `.venv_enterprise_dev` 已装非 editable wheel 后):
+
+```bash
+OTEL_ENABLED=true OTEL_TRACES_EXPORTER=none \
+.venv_enterprise_dev/Scripts/python.exe -c "
+from jiuwenswarm_instrumentor.activate import _APPLIED
+from openjiuwen.core.foundation.llm.model_clients.openai_model_client import OpenAIModelClient
+print(_APPLIED, bool(getattr(OpenAIModelClient.invoke,'_jiuwenswarm_wrapped',False)))
+"   # 期望: True True
 ```
-
-之后直接 `jiuwenclaw-start app`(或 `jiuwenclaw-app`)即可,所有 fork 出的子进程都会自动插桩。`OTEL_ENABLED` 未设时是 no-op,不影响日常使用。去掉这个文件即可关闭自动激活。
 
 ---
 

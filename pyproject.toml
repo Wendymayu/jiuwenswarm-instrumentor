@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jiuwenswarm-instrumentor"
-version = "0.1.0"
+version = "0.1.1"
 description = "Standalone OpenTelemetry auto-instrumentation for jiuwenclaw / openjiuwen"
 readme = "README.md"
 license = {text = "MIT"}
@@ -25,6 +25,14 @@ jiuwen-instrument = "jiuwenswarm_instrumentor.activate:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# The wheel-root `jiuwenswarm_instrumentor.pth` is injected by setup.py's build_py
+# cmdclass (data-files does NOT reliably land .pth in site-packages for wheels).
+# A non-editable `pip install .` drops that .pth into site-packages, where CPython's
+# site module runs its `import` line at every interpreter startup → fires
+# _autoload._autoload() in every Python process in this venv, including subprocesses
+# forked by jiuwenclaw.app. Editable installs don't ship the .pth — use the
+# `jiuwen-instrument` CLI wrapper or PYTHONPATH for dev.
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
