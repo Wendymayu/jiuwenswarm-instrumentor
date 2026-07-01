@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jiuwenswarm-instrumentor"
-version = "0.1.1"
+version = "0.2.0"
 description = "Standalone OpenTelemetry auto-instrumentation for jiuwenclaw / openjiuwen"
 readme = "README.md"
 license = {text = "MIT"}

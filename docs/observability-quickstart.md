@@ -12,45 +12,39 @@ pip install jiuwenswarm-instrumentor
 
 ## 2. 设环境变量
 
-五个都要设(漏 `OTEL_TRACES_EXPORTER` 或 `OTEL_EXPORTER_OTLP_PROTOCOL` 会没数据,见下方说明)。**Windows 用户注意:`export` 是 bash 语法,cmd/PowerShell 里要用各自的写法**,否则变量设不上、`jiuwenclaw-start` 在无 OTEL 环境下跑 → 没数据。
+**默认值已经够用**(traces/metrics exporter=`otlp`、protocol=`grpc`、endpoint=`http://localhost:4317`、`log_messages=true` 采集完整 prompt/response)。后端在本地 4317 gRPC(labubu / Phoenix 默认)的话,**只设一个变量**:
 
 **Windows cmd:**
 ```cmd
 set OTEL_ENABLED=true
-set OTEL_TRACES_EXPORTER=otlp
-set OTEL_METRICS_EXPORTER=otlp
-set OTEL_EXPORTER_OTLP_PROTOCOL=http
-set OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 ```
 
 **Windows PowerShell:**
 ```powershell
 $env:OTEL_ENABLED="true"
-$env:OTEL_TRACES_EXPORTER="otlp"
-$env:OTEL_METRICS_EXPORTER="otlp"
-$env:OTEL_EXPORTER_OTLP_PROTOCOL="http"
-$env:OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
 ```
 
 **Linux / macOS / git-bash:**
 ```bash
 export OTEL_ENABLED=true
-export OTEL_TRACES_EXPORTER=otlp
-export OTEL_METRICS_EXPORTER=otlp
-export OTEL_EXPORTER_OTLP_PROTOCOL=http
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 ```
 
-> ⚠️ **设完在同一窗口立刻启动(第 3 步)** —— `set`/`$env:`/`export` 只对当前 shell 生效,关掉窗口或换窗口就没了。要持久化用 `setx VAR value`(cmd,重启窗口生效)或系统环境变量设置。
+后端不在本地 4317、或用 HTTP(如 Langfuse 云端),加 endpoint/protocol:
+
+```cmd
+set OTEL_EXPORTER_OTLP_PROTOCOL=http
+set OTEL_EXPORTER_OTLP_ENDPOINT=https://your-backend
+```
+
+> ⚠️ **设完在同一窗口立刻启动(第 3 步)** —— `set`/`$env:`/`export` 只对当前 shell 生效,关掉窗口或换窗口就没了。持久化用 `setx VAR value`(cmd,重启窗口生效)或系统环境变量。
 >
-> ⚠️ 两个"必设"是踩过的坑:漏 `OTEL_TRACES_EXPORTER=otlp` → activate 会跑、类会被 patch,但 span 不导出(默认 `none`);漏 `OTEL_EXPORTER_OTLP_PROTOCOL=http` → gRPC exporter 打到 HTTP 端口 4318,导出失败。两个都设上才有数据。
+> 🔒 **默认采集完整 prompt/response + tool 参数/结果**(`OTEL_LOG_MESSAGES` 默认 `true`)。生产或隐私敏感场景设 `OTEL_LOG_MESSAGES=false` 关掉,只保留 token 用量/模型等指标。
+>
+> **自检变量真设上了**(启动前,同一窗口):cmd `set OTEL_ENABLED` / PowerShell `echo $env:OTEL_ENABLED` / bash `echo $OTEL_ENABLED` → 应非空。
 
-**自检变量是否真设上了**(在启动 jiuwenclaw-start 的同一窗口、启动前敲):
-- cmd:`set OTEL_ENABLED` → 应显示 `OTEL_ENABLED=true`
-- PowerShell:`echo $env:OTEL_ENABLED` → 应输出 `True`
-- bash:`echo $OTEL_ENABLED` → 应输出 `true`
+> 旧的 0.1.x 默认 exporter=`none`、`log_messages=false`,要显式设 5 个变量才有数据;0.2.0 起默认开箱即用。
 
-输出为空 = 没设上,这就是没数据的根因。本地不想接后端就把两个 exporter 都设成 `console`,span 直接打到终端(此时 endpoint 可不设)。
+本地不想接后端?设 `OTEL_TRACES_EXPORTER=console`(可同时 `OTEL_METRICS_EXPORTER=console`),span 直接打到终端。
 
 ## 3. 启动
 
@@ -66,16 +60,19 @@ python -m jiuwenclaw.app
 
 ## 4. 其余环境变量
 
-第 2 步已经设了上报必需的五个(`OTEL_ENABLED` / `OTEL_TRACES_EXPORTER` / `OTEL_METRICS_EXPORTER` / `OTEL_EXPORTER_OTLP_PROTOCOL` / `OTEL_EXPORTER_OTLP_ENDPOINT`),其余按需加:
+第 2 步只设了 `OTEL_ENABLED`(其余默认开箱即用)。按需覆盖:
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `OTEL_TRACES_EXPORTER` | `none` | `otlp`(发后端)/ `console`(打终端)/ `none` |
-| `OTEL_METRICS_EXPORTER` | `none` | 同上,metrics 通道 |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` | `grpc`(4317)/ `http`(4318),与端口匹配 |
+| `OTEL_TRACES_EXPORTER` | `otlp` | `otlp`(发后端)/ `console`(打终端)/ `none`(不导出) |
+| `OTEL_METRICS_EXPORTER` | `otlp` | 同上,metrics 通道 |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` | `grpc`(4317)/ `http`(4318),与端口匹配。用 HTTP 改 `http` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | 后端地址。非本地或 HTTP 后端时改 |
 | `OTEL_SERVICE_NAME` | `jiuwenclaw` | 服务名,挂在每个 span 上 |
-| `OTEL_LOG_MESSAGES` | `false` | 设 `true` 才在 trace 里采完整 prompt/response(`gen_ai.input.messages`/`gen_ai.output.messages`)+ tool 参数/结果。默认 false(隐私)—— **不设就看不到输入输出** |
-| `OTEL_MESSAGE_CONTENT_MAX_LENGTH` | `4096` | 单条消息内容截断长度(字符),配合 `OTEL_LOG_MESSAGES=true` |
+| `OTEL_LOG_MESSAGES` | `true` | 默认采完整 prompt/response(`gen_ai.input.messages`/`gen_ai.output.messages`)+ tool 参数/结果。**隐私敏感设 `false` 关掉** |
+| `OTEL_MESSAGE_CONTENT_MAX_LENGTH` | `4096` | 单条消息内容截断长度(字符) |
+| `OTEL_LOGS_EXPORTER` | `otlp` | jiuwenclaw stdlib 日志:`otlp`/`console`/`none`。默认开,trace 页可看执行期日志;量太大或不要日志设 `none` |
+| `OTEL_LOGS_LEVEL` | `INFO` | 日志级别(`DEBUG` 爆量) |
 | `OTEL_EXPORTER_OTLP_HEADERS` | - | 鉴权头,逗号分隔 `k=v`(如 Langfuse `Authorization=Basic ...`) |
 | `JIUWENSWARM_INSTRUMENT_AUTOLOAD` | (未设) | 设 `false` 关掉自动激活,改用 `jiuwen-instrument your_app`(单进程入口) |
 

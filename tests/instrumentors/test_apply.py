@@ -61,7 +61,7 @@ def test_apply_instrumentors_calls_logs_when_configured(monkeypatch):
         )
     from jiuwenswarm_instrumentor.config import InstrumentorConfig
     from jiuwenswarm_instrumentor.instrumentors import apply_instrumentors
-    cfg = InstrumentorConfig(enabled=True, logs_exporter="otlp")
+    cfg = InstrumentorConfig(enabled=True, logs_exporter="otlp", traces_exporter="none")  # isolate to logs
     apply_instrumentors(tracer=object(), meter=Mock(), cfg=cfg)
     assert called == [True]
 
@@ -83,7 +83,7 @@ def test_apply_instrumentors_calls_gateway_agentserver_when_traces_configured(mo
         )
     from jiuwenswarm_instrumentor.config import InstrumentorConfig
     from jiuwenswarm_instrumentor.instrumentors import apply_instrumentors
-    cfg = InstrumentorConfig(enabled=True, traces_exporter="otlp")  # logs_exporter default "none"
+    cfg = InstrumentorConfig(enabled=True, traces_exporter="otlp", logs_exporter="none")  # isolate to gateway/agentserver
     apply_instrumentors(tracer=object(), meter=Mock(), cfg=cfg)
     assert "gateway" in called
     assert "agentserver" in called

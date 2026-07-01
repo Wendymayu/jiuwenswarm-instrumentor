@@ -2,22 +2,25 @@ jiuwenswarm 智能体的可观测数据采集器 —— 独立、自包含的 Op
 
 ## 使用（无侵入）
 
+默认 exporter=otlp / protocol=grpc / endpoint=localhost:4317 / 采集完整 prompt/response —— 本地 gRPC 后端（labubu / Phoenix 默认 4317）**只设一个变量**：
+
 ```bash
 pip install jiuwenswarm-instrumentor          # 1. 装（非 editable，自带自动加载钩子）
-# 2. 设环境变量（五个都要；漏 TRACES_EXPORTER 或 PROTOCOL 会没数据）
-export OTEL_ENABLED=true
-export OTEL_TRACES_EXPORTER=otlp
-export OTEL_METRICS_EXPORTER=otlp
-export OTEL_EXPORTER_OTLP_PROTOCOL=http        # 4318 是 HTTP 端口，默认 grpc 会协议不匹配
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # 后端（Phoenix/Langfuse/labubu）
-python -m jiuwenclaw.app                       # 3. 跑——父 + agentserver + gateway 子进程全自动插桩
+export OTEL_ENABLED=true                      # 2. 唯一必设项（后端在本地 4317 gRPC 时）
+python -m jiuwenclaw.app                      # 3. 跑——父 + agentserver + gateway 子进程全自动插桩
 ```
 
-> **Windows 用户**：上面 `export` 是 bash 语法，cmd/PowerShell 不认。cmd 用 `set OTEL_ENABLED=true`，PowerShell 用 `$env:OTEL_ENABLED="true"`，**设完在同一窗口立刻启动**（`set`/`$env:` 只对当前窗口生效）。完整三平台写法见 `docs/observability-quickstart.md`。自检：`set OTEL_ENABLED`(cmd)/`echo $env:OTEL_ENABLED`(PS) 应非空。
+后端非本地或用 HTTP（如 Langfuse 云端）再加：
+```bash
+export OTEL_EXPORTER_OTLP_PROTOCOL=http
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://your-backend
+```
+
+> **Windows 用户**：`export` 是 bash 语法，cmd/PowerShell 不认。cmd 用 `set OTEL_ENABLED=true`，PowerShell 用 `$env:OTEL_ENABLED="true"`，**设完在同一窗口立刻启动**。完整三平台写法见 `docs/observability-quickstart.md`。自检：`set OTEL_ENABLED`(cmd)/`echo $env:OTEL_ENABLED`(PS) 应非空。
 
 **成功的判据是后端 UI 能查到 `service=jiuwenclaw` 的 trace**（`[instrumentor] active` 这行 INFO 在 `.pth` 自动加载时可能不显示，不影响上报）。无需改 jiuwenclaw 源码、无需 CLI 包裹：装包时随附的 `jiuwenswarm_instrumentor.pth` 让每个 Python 进程（含 `app.py` fork 的两个子进程）启动即自动激活。
 
-> ⚠️ 两个必设项是踩过的坑：漏 `OTEL_TRACES_EXPORTER=otlp`（默认 `none` 不导出）、漏 `OTEL_EXPORTER_OTLP_PROTOCOL=http`（gRPC 打到 HTTP 端口 4318 导出失败）——两个都设上才有数据。
+> 🔒 默认 `OTEL_LOG_MESSAGES=true` 采集完整 prompt/response + tool 参数/结果。隐私敏感场景设 `false`。
 
 > 用 Python 3.11–3.13（如 `py -3.13`），本包 `requires-python <3.14`。editable 安装不发货 `.pth`，要自动加载须非 editable。
 >
@@ -31,14 +34,16 @@ python -m jiuwenclaw.app                       # 3. 跑——父 + agentserver +
 |------|------|------|
 | `OTEL_ENABLED` | `false` | 总开关，关闭时零开销 no-op |
 | `JIUWENSWARM_INSTRUMENT_AUTOLOAD` | (未设) | 设 `false`/`0`/`no`/`off` 关闭 `.pth` 自动加载，即使 `OTEL_ENABLED=true` 也不自动激活（改用 CLI/代码激活时用） |
-| `OTEL_TRACES_EXPORTER` | `none` | `otlp` / `console` / `none` |
-| `OTEL_METRICS_EXPORTER` | `none` | `otlp` / `console` / `none` |
-| `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` | `grpc` / `http` |
+| `OTEL_TRACES_EXPORTER` | `otlp` | `otlp` / `console` / `none` |
+| `OTEL_METRICS_EXPORTER` | `otlp` | `otlp` / `console` / `none` |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` | `grpc` / `http`（HTTP 后端如 Langfuse 改 `http`） |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | 后端地址（Phoenix/Langfuse/labubu） |
 | `OTEL_SERVICE_NAME` | `jiuwenclaw` | 服务名 |
 | `OTEL_EXPORTER_OTLP_HEADERS` | - | 逗号分隔 `k=v` 鉴权头 |
-| `OTEL_LOG_MESSAGES` | `false` | 设 `true` 采集完整 prompt/response(`gen_ai.input.messages`/`gen_ai.output.messages`)+ tool 参数/结果。**默认 false(隐私)** —— 不设则 trace 里看不到输入输出 |
+| `OTEL_LOG_MESSAGES` | `true` | 采集完整 prompt/response(`gen_ai.input.messages`/`gen_ai.output.messages`)+ tool 参数/结果。**隐私敏感设 `false`** |
 | `OTEL_MESSAGE_CONTENT_MAX_LENGTH` | `4096` | 单条消息内容截断长度(字符) |
+| `OTEL_LOGS_EXPORTER` | `otlp` | jiuwenclaw stdlib 日志导出:`otlp` / `console` / `none`。默认开,trace 页可看执行期日志 |
+| `OTEL_LOGS_LEVEL` | `INFO` | 日志采集级别(`DEBUG` 爆量) |
 
 ## 采集的信号
 
