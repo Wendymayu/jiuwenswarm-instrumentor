@@ -37,8 +37,8 @@ python -m jiuwenclaw.app                       # 3. 跑——父 + agentserver +
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317` | 后端地址（Phoenix/Langfuse/labubu） |
 | `OTEL_SERVICE_NAME` | `jiuwenclaw` | 服务名 |
 | `OTEL_EXPORTER_OTLP_HEADERS` | - | 逗号分隔 `k=v` 鉴权头 |
-| `OTEL_LOG_MESSAGES` | `false` | 预留：完整消息内容采集（暂未实现） |
-| `OTEL_MESSAGE_CONTENT_MAX_LENGTH` | `4096` | 预留：单条内容长度上限（暂未实现） |
+| `OTEL_LOG_MESSAGES` | `false` | 设 `true` 采集完整 prompt/response(`gen_ai.input.messages`/`gen_ai.output.messages`)+ tool 参数/结果。**默认 false(隐私)** —— 不设则 trace 里看不到输入输出 |
+| `OTEL_MESSAGE_CONTENT_MAX_LENGTH` | `4096` | 单条消息内容截断长度(字符) |
 
 ## 采集的信号
 

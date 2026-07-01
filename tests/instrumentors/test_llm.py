@@ -67,6 +67,41 @@ async def test_invoke_creates_genai_span(exporter):
     assert "gen_ai.context.user_messages" in span.attributes
 
 
+async def test_log_messages_true_records_input_output_messages(exporter):
+    """OTEL_LOG_MESSAGES=true (log_messages=True) must attach full prompt/response
+    to the gen_ai.chat span; default False omits them (privacy). Regression for
+    'trace has no input/output'."""
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+    Fake = _make_fake_client_cls()
+    instrument_llm(tracer, metrics, log_messages=True, model_client_cls=Fake)
+
+    client = Fake()
+    await client.invoke([{"role": "user", "content": "hello"}])
+
+    assert len(exporter.spans) == 1
+    span = exporter.spans[0]
+    assert "gen_ai.input.messages" in span.attributes
+    assert "gen_ai.output.messages" in span.attributes
+    # full prompt + response captured
+    assert "hello" in span.attributes["gen_ai.input.messages"]
+    assert "hi" in span.attributes["gen_ai.output.messages"]
+
+
+async def test_log_messages_false_omits_input_output_messages(exporter):
+    """Default log_messages=False must NOT attach prompt/response content."""
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+    Fake = _make_fake_client_cls()
+    instrument_llm(tracer, metrics, log_messages=False, model_client_cls=Fake)
+
+    await Fake().invoke([{"role": "user", "content": "hello"}])
+
+    span = exporter.spans[0]
+    assert "gen_ai.input.messages" not in span.attributes
+    assert "gen_ai.output.messages" not in span.attributes
+
+
 async def test_stream_creates_span_with_ttft_and_final_usage(exporter):
     tracer = trace.get_tracer("t")
     metrics = Metrics(Mock())

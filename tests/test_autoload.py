@@ -51,5 +51,10 @@ def test_module_import_is_side_effect_safe(monkeypatch):
     """Re-importing the module must not raise even if activate would fail."""
     monkeypatch.delenv("OTEL_ENABLED", raising=False)
     monkeypatch.delenv("JIUWENSWARM_INSTRUMENT_AUTOLOAD", raising=False)
+    # Isolate from the real ~/.jiuwenclaw/config/.env: reload re-runs the
+    # module-level _autoload() -> activate() -> load_env_for_instrumentor(),
+    # which would load OTEL_ENABLED=true from the real .env and set _APPLIED=True,
+    # leaking into later tests.
+    monkeypatch.setattr("jiuwenswarm_instrumentor._env.load_env_for_instrumentor", lambda: None)
     # importlib.reload re-runs the module-level _autoload() call; must not raise.
     importlib.reload(al)

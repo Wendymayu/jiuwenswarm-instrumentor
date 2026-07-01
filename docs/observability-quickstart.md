@@ -74,6 +74,8 @@ python -m jiuwenclaw.app
 | `OTEL_METRICS_EXPORTER` | `none` | 同上,metrics 通道 |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` | `grpc`(4317)/ `http`(4318),与端口匹配 |
 | `OTEL_SERVICE_NAME` | `jiuwenclaw` | 服务名,挂在每个 span 上 |
+| `OTEL_LOG_MESSAGES` | `false` | 设 `true` 才在 trace 里采完整 prompt/response(`gen_ai.input.messages`/`gen_ai.output.messages`)+ tool 参数/结果。默认 false(隐私)—— **不设就看不到输入输出** |
+| `OTEL_MESSAGE_CONTENT_MAX_LENGTH` | `4096` | 单条消息内容截断长度(字符),配合 `OTEL_LOG_MESSAGES=true` |
 | `OTEL_EXPORTER_OTLP_HEADERS` | - | 鉴权头,逗号分隔 `k=v`(如 Langfuse `Authorization=Basic ...`) |
 | `JIUWENSWARM_INSTRUMENT_AUTOLOAD` | (未设) | 设 `false` 关掉自动激活,改用 `jiuwen-instrument your_app`(单进程入口) |
 
