@@ -14,10 +14,15 @@ pip install jiuwenswarm-instrumentor
 
 ```bash
 export OTEL_ENABLED=true
+export OTEL_TRACES_EXPORTER=otlp           # 必设!默认 none 不导出
+export OTEL_METRICS_EXPORTER=otlp          # metrics 同理
+export OTEL_EXPORTER_OTLP_PROTOCOL=http    # 必设!4318 是 HTTP 端口,默认 grpc 会打到 4317 协议不匹配
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # 你的后端地址
 ```
 
-本地先验证不想接后端?加一行 `export OTEL_TRACES_EXPORTER=console`,span 直接打到终端。
+> ⚠️ 上面两个"必设"是踩过的坑:漏 `OTEL_TRACES_EXPORTER=otlp` → activate 会跑、类会被 patch,但 span 不导出(默认 `none`);漏 `OTEL_EXPORTER_OTLP_PROTOCOL=http` → gRPC exporter 打到 HTTP 端口 4318,导出失败。两个都设上才有数据。
+
+本地先验证不想接后端?把两个 exporter 都设成 `console`,span 直接打到终端(此时 endpoint 可不设)。
 
 ## 3. 启动
 
@@ -25,19 +30,15 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # 你的后端地址
 python -m jiuwenclaw.app
 ```
 
-日志出现这行即成功(父 + agentserver + gateway 子进程各一行,都会自动激活):
+子进程(agentserver + gateway)启动时各自自动激活。**成功的判据是后端 UI 里能查到 `service=jiuwenclaw` 的 trace** —— 后端收到就是真的在上报。
 
-```
-INFO:jiuwenswarm_instrumentor:[instrumentor] active: ...
-```
-
-完事。span 已发到后端。
+> 日志里**可能**出现 `[instrumentor] active: traces=otlp metrics=otlp ...`(若 jiuwenclaw 的日志配置捕获了 instrumentor logger);但 `.pth` 自动加载发生在解释器启动、日志配置之前,这行 INFO 有时不显示——**它出不出现都不影响上报**,以**后端有数据**为准。发一条对话,在后端按 `service=jiuwenclaw` 查,应看到 `jiuwenclaw.gateway.agent.request` / `jiuwenclaw.agent.invoke` / `gen_ai.chat` / `gen_ai.tool` 等 span。
 
 ---
 
 ## 4. 其余环境变量
 
-上面三步只用了 `OTEL_ENABLED` 和 `OTEL_EXPORTER_OTLP_ENDPOINT`,其余按需加:
+第 2 步已经设了上报必需的五个(`OTEL_ENABLED` / `OTEL_TRACES_EXPORTER` / `OTEL_METRICS_EXPORTER` / `OTEL_EXPORTER_OTLP_PROTOCOL` / `OTEL_EXPORTER_OTLP_ENDPOINT`),其余按需加:
 
 | 变量 | 默认 | 说明 |
 |---|---|---|

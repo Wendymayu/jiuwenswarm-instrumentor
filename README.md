@@ -1,15 +1,21 @@
 jiuwenswarm 智能体的可观测数据采集器 —— 独立、自包含的 OpenTelemetry 自动插桩，为 jiuwenclaw / openjiuwen 多通道 AI Agent 采集 traces + metrics，经 OTLP 导出至任意标准可观测后端（Arize Phoenix / Langfuse / 自托管 labubu，三者同讲 OTLP，仅端点不同）。
 
-## 使用（无侵入，三步）
+## 使用（无侵入）
 
 ```bash
 pip install jiuwenswarm-instrumentor          # 1. 装（非 editable，自带自动加载钩子）
-export OTEL_ENABLED=true                      # 2. 开总开关
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # 你的后端（Phoenix/Langfuse/labubu）
-python -m jiuwenclaw.app                      # 3. 跑——父 + agentserver + gateway 子进程全自动插桩
+# 2. 设环境变量（五个都要；漏 TRACES_EXPORTER 或 PROTOCOL 会没数据）
+export OTEL_ENABLED=true
+export OTEL_TRACES_EXPORTER=otlp
+export OTEL_METRICS_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=http        # 4318 是 HTTP 端口，默认 grpc 会协议不匹配
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # 后端（Phoenix/Langfuse/labubu）
+python -m jiuwenclaw.app                       # 3. 跑——父 + agentserver + gateway 子进程全自动插桩
 ```
 
-日志出现 `[instrumentor] active` 即成功。无需改 jiuwenclaw 源码、无需 CLI 包裹：装包时随附的 `jiuwenswarm_instrumentor.pth` 让每个 Python 进程（含 `app.py` fork 的两个子进程）启动即自动激活。
+**成功的判据是后端 UI 能查到 `service=jiuwenclaw` 的 trace**（`[instrumentor] active` 这行 INFO 在 `.pth` 自动加载时可能不显示，不影响上报）。无需改 jiuwenclaw 源码、无需 CLI 包裹：装包时随附的 `jiuwenswarm_instrumentor.pth` 让每个 Python 进程（含 `app.py` fork 的两个子进程）启动即自动激活。
+
+> ⚠️ 两个必设项是踩过的坑：漏 `OTEL_TRACES_EXPORTER=otlp`（默认 `none` 不导出）、漏 `OTEL_EXPORTER_OTLP_PROTOCOL=http`（gRPC 打到 HTTP 端口 4318 导出失败）——两个都设上才有数据。
 
 > 用 Python 3.11–3.13（如 `py -3.13`），本包 `requires-python <3.14`。editable 安装不发货 `.pth`，要自动加载须非 editable。
 >
