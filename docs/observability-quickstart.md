@@ -12,17 +12,45 @@ pip install jiuwenswarm-instrumentor
 
 ## 2. 设环境变量
 
-```bash
-export OTEL_ENABLED=true
-export OTEL_TRACES_EXPORTER=otlp           # 必设!默认 none 不导出
-export OTEL_METRICS_EXPORTER=otlp          # metrics 同理
-export OTEL_EXPORTER_OTLP_PROTOCOL=http    # 必设!4318 是 HTTP 端口,默认 grpc 会打到 4317 协议不匹配
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # 你的后端地址
+五个都要设(漏 `OTEL_TRACES_EXPORTER` 或 `OTEL_EXPORTER_OTLP_PROTOCOL` 会没数据,见下方说明)。**Windows 用户注意:`export` 是 bash 语法,cmd/PowerShell 里要用各自的写法**,否则变量设不上、`jiuwenclaw-start` 在无 OTEL 环境下跑 → 没数据。
+
+**Windows cmd:**
+```cmd
+set OTEL_ENABLED=true
+set OTEL_TRACES_EXPORTER=otlp
+set OTEL_METRICS_EXPORTER=otlp
+set OTEL_EXPORTER_OTLP_PROTOCOL=http
+set OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 ```
 
-> ⚠️ 上面两个"必设"是踩过的坑:漏 `OTEL_TRACES_EXPORTER=otlp` → activate 会跑、类会被 patch,但 span 不导出(默认 `none`);漏 `OTEL_EXPORTER_OTLP_PROTOCOL=http` → gRPC exporter 打到 HTTP 端口 4318,导出失败。两个都设上才有数据。
+**Windows PowerShell:**
+```powershell
+$env:OTEL_ENABLED="true"
+$env:OTEL_TRACES_EXPORTER="otlp"
+$env:OTEL_METRICS_EXPORTER="otlp"
+$env:OTEL_EXPORTER_OTLP_PROTOCOL="http"
+$env:OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4318"
+```
 
-本地先验证不想接后端?把两个 exporter 都设成 `console`,span 直接打到终端(此时 endpoint 可不设)。
+**Linux / macOS / git-bash:**
+```bash
+export OTEL_ENABLED=true
+export OTEL_TRACES_EXPORTER=otlp
+export OTEL_METRICS_EXPORTER=otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=http
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+```
+
+> ⚠️ **设完在同一窗口立刻启动(第 3 步)** —— `set`/`$env:`/`export` 只对当前 shell 生效,关掉窗口或换窗口就没了。要持久化用 `setx VAR value`(cmd,重启窗口生效)或系统环境变量设置。
+>
+> ⚠️ 两个"必设"是踩过的坑:漏 `OTEL_TRACES_EXPORTER=otlp` → activate 会跑、类会被 patch,但 span 不导出(默认 `none`);漏 `OTEL_EXPORTER_OTLP_PROTOCOL=http` → gRPC exporter 打到 HTTP 端口 4318,导出失败。两个都设上才有数据。
+
+**自检变量是否真设上了**(在启动 jiuwenclaw-start 的同一窗口、启动前敲):
+- cmd:`set OTEL_ENABLED` → 应显示 `OTEL_ENABLED=true`
+- PowerShell:`echo $env:OTEL_ENABLED` → 应输出 `True`
+- bash:`echo $OTEL_ENABLED` → 应输出 `true`
+
+输出为空 = 没设上,这就是没数据的根因。本地不想接后端就把两个 exporter 都设成 `console`,span 直接打到终端(此时 endpoint 可不设)。
 
 ## 3. 启动
 

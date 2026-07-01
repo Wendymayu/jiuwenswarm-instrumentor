@@ -13,6 +13,8 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318   # 后端（Phoenix/La
 python -m jiuwenclaw.app                       # 3. 跑——父 + agentserver + gateway 子进程全自动插桩
 ```
 
+> **Windows 用户**：上面 `export` 是 bash 语法，cmd/PowerShell 不认。cmd 用 `set OTEL_ENABLED=true`，PowerShell 用 `$env:OTEL_ENABLED="true"`，**设完在同一窗口立刻启动**（`set`/`$env:` 只对当前窗口生效）。完整三平台写法见 `docs/observability-quickstart.md`。自检：`set OTEL_ENABLED`(cmd)/`echo $env:OTEL_ENABLED`(PS) 应非空。
+
 **成功的判据是后端 UI 能查到 `service=jiuwenclaw` 的 trace**（`[instrumentor] active` 这行 INFO 在 `.pth` 自动加载时可能不显示，不影响上报）。无需改 jiuwenclaw 源码、无需 CLI 包裹：装包时随附的 `jiuwenswarm_instrumentor.pth` 让每个 Python 进程（含 `app.py` fork 的两个子进程）启动即自动激活。
 
 > ⚠️ 两个必设项是踩过的坑：漏 `OTEL_TRACES_EXPORTER=otlp`（默认 `none` 不导出）、漏 `OTEL_EXPORTER_OTLP_PROTOCOL=http`（gRPC 打到 HTTP 端口 4318 导出失败）——两个都设上才有数据。
