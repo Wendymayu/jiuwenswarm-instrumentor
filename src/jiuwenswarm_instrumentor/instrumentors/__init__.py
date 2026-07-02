@@ -15,7 +15,7 @@ def apply_instrumentors(tracer, meter, cfg):
     for label, fn in (
         ("llm", lambda: llm.instrument_llm(tracer, metrics, log_messages=log_messages, message_max_length=getattr(cfg, "message_max_length", 4096))),
         ("tool", lambda: tool.instrument_tool(tracer, metrics, log_messages=log_messages, message_max_length=getattr(cfg, "message_max_length", 4096))),
-        ("agent", lambda: agent.instrument_agent(tracer, metrics)),
+        ("agent", lambda: agent.instrument_agent(tracer, metrics, log_messages=log_messages, message_max_length=getattr(cfg, "message_max_length", 4096))),
         ("session", lambda: session.instrument_session(tracer, metrics)),
     ):
         try:

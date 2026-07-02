@@ -93,3 +93,62 @@ async def test_react_iteration_count(exporter):
     await FakeAgent().invoke("test")
     agent_span = [s for s in exporter.spans if s.name == "jiuwenclaw.agent.invoke"][0]
     assert agent_span.attributes["jiuwenclaw.agent.iterations"] == 3
+
+
+async def test_agent_records_user_input(exporter):
+    """agent.invoke root span carries this turn's user input (gen_ai.context.user_messages)."""
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+    Fake = _fake_agent_cls()
+    instrument_agent(tracer, metrics, agent_cls=Fake, log_messages=True, message_max_length=4096)
+    await Fake().invoke({"query": "hello jiuwen"}, session=_Session())
+    span = exporter.spans[0]
+    assert span.attributes["gen_ai.context.user_messages"] == "hello jiuwen"
+
+
+async def test_agent_records_user_input_string(exporter):
+    """Bare-string inputs are recorded verbatim."""
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+    Fake = _fake_agent_cls()
+    instrument_agent(tracer, metrics, agent_cls=Fake, log_messages=True)
+    await Fake().invoke("ping", session=_Session())
+    assert exporter.spans[0].attributes["gen_ai.context.user_messages"] == "ping"
+
+
+async def test_agent_records_user_input_from_messages(exporter):
+    """List-of-messages inputs surface the user-role message."""
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+    Fake = _fake_agent_cls()
+    instrument_agent(tracer, metrics, agent_cls=Fake, log_messages=True)
+    msgs = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "what is 1+1"},
+        {"role": "assistant", "content": "2"},
+        {"role": "user", "content": "thanks"},
+    ]
+    await Fake().invoke(msgs, session=_Session())
+    assert exporter.spans[0].attributes["gen_ai.context.user_messages"] == "what is 1+1\nthanks"
+
+
+async def test_agent_user_input_truncated(exporter):
+    """Long inputs are capped at message_max_length."""
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+    Fake = _fake_agent_cls()
+    instrument_agent(tracer, metrics, agent_cls=Fake, log_messages=True, message_max_length=10)
+    await Fake().invoke("x" * 200, session=_Session())
+    val = exporter.spans[0].attributes["gen_ai.context.user_messages"]
+    assert len(val) == 10
+    assert val.endswith("...")
+
+
+async def test_agent_user_input_disabled_when_log_messages_off(exporter):
+    """When log_messages is False, no user input is captured (privacy)."""
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+    Fake = _fake_agent_cls()
+    instrument_agent(tracer, metrics, agent_cls=Fake, log_messages=False)
+    await Fake().invoke("secret", session=_Session())
+    assert "gen_ai.context.user_messages" not in exporter.spans[0].attributes
