@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jiuwenswarm-instrumentor"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Standalone OpenTelemetry auto-instrumentation for jiuwenclaw / openjiuwen"
 readme = "README.md"
 license = {text = "MIT"}
@@ -25,6 +25,12 @@ jiuwen-instrument = "jiuwenswarm_instrumentor.activate:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# Single source of truth for the version: _version.py. pyproject reads it via
+# setuptools dynamic version (attr), so a release only needs to bump
+# _version.py + the smoke-test guard in tests/test_smoke.py.
+[tool.setuptools.dynamic]
+version = {attr = "jiuwenswarm_instrumentor._version.__version__"}
 
 # The wheel-root `jiuwenswarm_instrumentor.pth` is injected by setup.py's build_py
 # cmdclass (data-files does NOT reliably land .pth in site-packages for wheels).
