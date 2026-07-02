@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jiuwenswarm-instrumentor"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Standalone OpenTelemetry auto-instrumentation for jiuwenclaw / openjiuwen"
 requires-python = ">=3.11,<3.14"
 dependencies = [
@@ -23,6 +23,14 @@ jiuwen-instrument = "jiuwenswarm_instrumentor.activate:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# Single source of truth for the version: _version.py. pyproject reads it via
+# setuptools dynamic version (attr), so a release only needs to bump
+# _version.py + the smoke-test guard in tests/test_smoke.py.
+# develop branch uses the 1.x series; enterprise_dev uses the 0.x series
+# (the two branches have divergent code — version numbers must not collide).
+[tool.setuptools.dynamic]
+version = {attr = "jiuwenswarm_instrumentor._version.__version__"}
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
