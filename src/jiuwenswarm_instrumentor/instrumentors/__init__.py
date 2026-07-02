@@ -2,7 +2,7 @@
 from __future__ import annotations
 import logging
 
-from jiuwenswarm_instrumentor.instrumentors import llm, tool, agent, session, logs, gateway, agentserver, context_compaction
+from jiuwenswarm_instrumentor.instrumentors import llm, tool, agent, session, subagent, logs, gateway, agentserver, context_compaction
 from jiuwenswarm_instrumentor.metrics import Metrics
 
 logger = logging.getLogger("jiuwenswarm_instrumentor")
@@ -17,6 +17,7 @@ def apply_instrumentors(tracer, meter, cfg):
         ("tool", lambda: tool.instrument_tool(tracer, metrics, log_messages=log_messages, message_max_length=getattr(cfg, "message_max_length", 4096))),
         ("agent", lambda: agent.instrument_agent(tracer, metrics)),
         ("session", lambda: session.instrument_session(tracer, metrics)),
+        ("subagent", lambda: subagent.instrument_subagent(tracer, metrics)),
     ):
         try:
             fn()
