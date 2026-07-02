@@ -24,13 +24,14 @@
 
 ## 常规发布(推荐)
 
-### 1. 改版本号(三处)
+### 1. 改版本号(两处)
+
+版本号**单源**在 `_version.py`,`pyproject.toml` 通过 setuptools `dynamic` 自动读(`[tool.setuptools.dynamic] version = {attr = "jiuwenswarm_instrumentor._version.__version__"}`),不用改。每发一版只改:
 
 | 文件 | 改什么 |
 |---|---|
-| `pyproject.toml` | `version = "0.2.0"` → 新版本 |
-| `src/jiuwenswarm_instrumentor/_version.py` | `__version__ = "0.2.0"` → 新版本 |
-| `tests/test_smoke.py` | `assert __version__ == "0.2.0"` → 新版本 |
+| `src/jiuwenswarm_instrumentor/_version.py` | `__version__ = "0.2.0"` → 新版本(真源) |
+| `tests/test_smoke.py` | `assert __version__ == "0.2.0"` → 新版本(守卫,防止忘 bump) |
 
 ### 2. 本地预检(在打 tag 前先抓构建问题)
 
