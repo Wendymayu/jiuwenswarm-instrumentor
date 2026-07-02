@@ -4,6 +4,20 @@
 
 > 旧的本地 `twine upload` + PyPI token 流程已废弃(被密钥检测拦截 + Windows GBK/粘贴问题搞坏过,别再走)。
 
+## 分支版本约定
+
+两条分支代码已分叉,版本号**分开演化、互不碰撞**:
+
+| 分支 | 版本系列 | 当前 |
+|---|---|---|
+| `enterprise_dev`(默认分支) | `0.x` | `0.2.0` |
+| `develop` | `1.x` | `1.0.0` |
+
+- 在哪条分支发版,版本号就用那条分支的系列(enterprise_dev 永远 `0.x`,develop 永远 `1.x`)。
+- 同一版本号(如 `0.2.0`)从任何分支都只能发一次,PyPI 拒绝覆盖——所以两条线靠首位不同(0 vs 1)天然不撞。
+- 两边都用 `_version.py` 单源 + setuptools `dynamic` 读取,发版各改 2 处(`_version.py` + `tests/test_smoke.py`)。
+- 从其他分支发版的操作见下方「从其他分支发布」。
+
 ## 前置(一次性,已配好)
 
 1. **PyPI trusted publisher**:在 https://pypi.org/manage/project/jiuwenswarm-instrumentor/settings/publishing/ 添加一个 GitHub publisher:
@@ -102,9 +116,36 @@ py -3.13 -m venv /tmp/verify
 3. 选分支 **`enterprise_dev`**
 4. 点绿色的 **"Run workflow"**
 
-工作流从所选分支 HEAD 构建并发布。要求该分支 HEAD 的版本号已经是目标版本(三处已改)。
+工作流从所选分支 HEAD 构建并发布。要求该分支 HEAD 的版本号已经是目标版本(`_version.py` + `tests/test_smoke.py` 已改)。
 
 > 0.2.0 就是这样发的:`v0.2.0` tag 在 `release.yml` 提交之前就推了、没触发,改用 `workflow_dispatch` 从 `enterprise_dev` 发的。
+
+## 从其他分支发布(如 develop)
+
+PyPI trusted publisher 是 **branch 无关**的(只校验 owner/repo/workflow 文件名/environment),工作流也已注册过。从 `develop` 发 `1.x` 版本有两种方式:
+
+**方式 A — tag push(推荐,自动触发):** tag 触发只看 tag 指向的 commit 有没有 `release.yml`,与分支名无关。
+
+```bash
+git checkout develop
+# 改 src/jiuwenswarm_instrumentor/_version.py + tests/test_smoke.py 到 1.x 目标版本
+git commit -am "release: v1.0.0"
+git tag v1.0.0
+git push origin develop
+git push origin v1.0.0     # tag 指向的 commit 含 release.yml → 触发
+```
+
+打 tag 前先确认那个 commit 有 `release.yml`:
+```bash
+git cat-file -e HEAD:.github/workflows/release.yml && echo "OK 可打 tag" || echo "没有,先合入 release.yml"
+```
+
+**方式 B — workflow_dispatch:** Actions → release 工作流 → Run workflow → 分支下拉选 `develop` → Run。从 develop HEAD 构建。
+
+**三个注意点:**
+1. **触发点必须有 `release.yml`**:tag push 看 tag 指向的 commit;workflow_dispatch 看所选分支。没有就不触发(前者静默,后者 404)。
+2. **默认分支不用改**:工作流已在 `enterprise_dev`(默认)上注册过,永久生效。从 develop 发不需要切默认分支。
+3. **别发重复版本**:同版本号任何分支只能发一次。靠 0.x/1.x 首位不同避免撞号。
 
 ## 踩过的坑
 
