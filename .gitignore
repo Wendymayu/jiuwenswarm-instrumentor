@@ -28,3 +28,6 @@ coverage.xml
 .DS_Store
 .idea/
 .vscode/
+
+# runtime logs emitted by jiuwenclaw/openjiuwen + the logs instrumentor during tests
+logs/

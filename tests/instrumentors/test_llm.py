@@ -272,3 +272,32 @@ async def test_normal_chat_not_labeled(exporter):
     await Fake().invoke(messages)
     span = exporter.spans[0]
     assert span.attributes["gen_ai.operation.name"] == "chat"
+
+
+async def test_message_max_length_zero_disables_truncation(exporter):
+    """message_max_length=0 → input/output messages are recorded in full, no '...' cap.
+    Regression: _cap(text, 0) used to slice text[:-3] and silently drop the last 3 chars."""
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+    long_text = "X" * 5000  # well above the old 4096 default
+
+    class _ModelConfig:
+        model_name = "gpt-x"; temperature = 0.7; top_p = None
+    class _ClientConfig:
+        client_provider = "OpenAI"
+
+    class FakeModelClient:
+        model_config = _ModelConfig()
+        model_client_config = _ClientConfig()
+        async def invoke(self, messages, **kw):
+            return _Assistant(content=long_text, usage=_Usage(1, 1, 2))
+
+    instrument_llm(tracer, metrics, log_messages=True, message_max_length=0,
+                   model_client_cls=FakeModelClient)
+
+    await FakeModelClient().invoke([{"role": "user", "content": long_text}])
+    span = exporter.spans[0]
+    inp = json.loads(span.attributes["gen_ai.input.messages"])
+    assert inp[0]["parts"][0]["content"] == long_text  # full, untruncated
+    out = json.loads(span.attributes["gen_ai.output.messages"])
+    assert out[0]["parts"][0]["content"] == long_text  # full, untruncated
