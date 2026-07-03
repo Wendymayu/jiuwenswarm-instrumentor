@@ -83,7 +83,34 @@ def test_apply_instrumentors_calls_gateway_agentserver_when_traces_configured(mo
         )
     from jiuwenswarm_instrumentor.config import InstrumentorConfig
     from jiuwenswarm_instrumentor.instrumentors import apply_instrumentors
-    cfg = InstrumentorConfig(enabled=True, traces_exporter="otlp", logs_exporter="none")  # isolate to gateway/agentserver
+    cfg = InstrumentorConfig(enabled=True, traces_exporter="otlp", logs_exporter="none", instrument_gateway=True)  # isolate to gateway/agentserver
     apply_instrumentors(tracer=object(), meter=Mock(), cfg=cfg)
     assert "gateway" in called
+    assert "agentserver" in called
+
+
+def test_apply_instrumentors_skips_gateway_when_disabled(monkeypatch):
+    """OTEL_INSTRUMENT_GATEWAY=false must skip gateway entirely (no spans, no traceparent
+    inject). agentserver is still applied — agent traces remain complete, just standalone
+    (agent.invoke becomes the root, no gateway parent)."""
+    called = []
+    monkeypatch.setattr(
+        "jiuwenswarm_instrumentor.instrumentors.gateway.instrument_gateway",
+        lambda *a, **k: called.append("gateway"),
+    )
+    monkeypatch.setattr(
+        "jiuwenswarm_instrumentor.instrumentors.agentserver.instrument_agentserver",
+        lambda *a, **k: called.append("agentserver"),
+    )
+    for name in ("llm", "tool", "agent", "session"):
+        monkeypatch.setattr(
+            f"jiuwenswarm_instrumentor.instrumentors.{name}.instrument_{name}",
+            lambda *a, _n=name, **k: None,
+        )
+    from jiuwenswarm_instrumentor.config import InstrumentorConfig
+    from jiuwenswarm_instrumentor.instrumentors import apply_instrumentors
+    cfg = InstrumentorConfig(enabled=True, traces_exporter="otlp", logs_exporter="none",
+                             instrument_gateway=False)
+    apply_instrumentors(tracer=object(), meter=Mock(), cfg=cfg)
+    assert "gateway" not in called
     assert "agentserver" in called

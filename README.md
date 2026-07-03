@@ -44,6 +44,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=https://your-backend
 | `OTEL_MESSAGE_CONTENT_MAX_LENGTH` | `4096` | 单条消息内容截断长度(字符) |
 | `OTEL_LOGS_EXPORTER` | `otlp` | jiuwenclaw stdlib 日志导出:`otlp` / `console` / `none`。默认开,trace 页可看执行期日志 |
 | `OTEL_LOGS_LEVEL` | `INFO` | 日志采集级别(`DEBUG` 爆量) |
+| `OTEL_INSTRUMENT_GATEWAY` | `false` | 是否采集 gateway 可观测数据(`channel.request`/`jiuwenclaw.gateway.agent.request` span + traceparent 注入)。默认关:与 agent 行为无关,`agent.invoke` 直接作为根 trace。想看 gateway 或要跨进程链路时设 `true` |
 
 ## 采集的信号
 

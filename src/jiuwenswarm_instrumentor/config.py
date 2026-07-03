@@ -25,6 +25,7 @@ class InstrumentorConfig:
     log_level: str = "INFO"              # NOTSET|DEBUG|INFO|WARNING|ERROR|CRITICAL
     log_excluded_loggers: tuple = ()
     log_message_max_length: int = 8192
+    instrument_gateway: bool = False       # OTEL_INSTRUMENT_GATEWAY=true → opt into gateway spans + traceparent inject (off by default: gateway data is tangential to agent traces; agent.invoke is a standalone root when off)
 
 
 def _str(key, default):
@@ -80,4 +81,5 @@ def load_config() -> InstrumentorConfig:
             s.strip() for s in _str("OTEL_LOGS_EXCLUDED_LOGGERS", "jiuwenclaw.interface.resp").split(",") if s.strip()
         ),
         log_message_max_length=int(_str("OTEL_LOG_MESSAGE_MAX_LENGTH", "8192") or 8192),
+        instrument_gateway=_bool("OTEL_INSTRUMENT_GATEWAY", False),
     )

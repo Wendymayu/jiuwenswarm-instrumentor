@@ -75,6 +75,7 @@ python -m jiuwenclaw.app
 | `OTEL_LOGS_LEVEL` | `INFO` | 日志级别(`DEBUG` 爆量) |
 | `OTEL_EXPORTER_OTLP_HEADERS` | - | 鉴权头,逗号分隔 `k=v`(如 Langfuse `Authorization=Basic ...`) |
 | `JIUWENSWARM_INSTRUMENT_AUTOLOAD` | (未设) | 设 `false` 关掉自动激活,改用 `jiuwen-instrument your_app`(单进程入口) |
+| `OTEL_INSTRUMENT_GATEWAY` | `false` | 是否采集 gateway 数据(`channel.request`/`jiuwenclaw.gateway.agent.request` span + traceparent 注入)。默认关:与 agent 行为无关,`agent.invoke` 直接作为根 trace。想看 gateway 或要跨进程链路时设 `true` |
 
 `OTEL_ENABLED=false`(默认)时全部零开销 no-op,不影响业务。
 

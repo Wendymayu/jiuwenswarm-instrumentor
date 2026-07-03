@@ -108,3 +108,20 @@ def test_logs_env_overrides():
     assert cfg.log_level == "DEBUG"
     assert cfg.log_excluded_loggers == ("a", "b")
     assert cfg.log_message_max_length == 100
+
+
+def test_instrument_gateway_default_false():
+    """Gateway instrumentation is OFF by default — gateway data is tangential to agent
+    traces. Opt in with OTEL_INSTRUMENT_GATEWAY=true."""
+    cfg = load_config()
+    assert cfg.instrument_gateway is False
+
+
+def test_instrument_gateway_can_be_enabled():
+    """OTEL_INSTRUMENT_GATEWAY=true opts into gateway spans + traceparent inject."""
+    os.environ["OTEL_INSTRUMENT_GATEWAY"] = "true"
+    try:
+        cfg = load_config()
+    finally:
+        del os.environ["OTEL_INSTRUMENT_GATEWAY"]
+    assert cfg.instrument_gateway is True
