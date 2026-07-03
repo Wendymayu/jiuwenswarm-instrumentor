@@ -5,6 +5,14 @@ from jiuwenswarm_instrumentor import activate
 
 def test_activate_disabled_is_noop(monkeypatch):
     monkeypatch.delenv("OTEL_ENABLED", raising=False)
+    # Defense-in-depth: a prior test may have left _APPLIED=True (e.g. an autoload
+    # test that exercised the real activate path). Reset so this test hits the
+    # disabled branch.
+    monkeypatch.setattr(activate, "_APPLIED", False)
+    # Isolate from the real ~/.jiuwenclaw/config/.env on the dev machine: activate()
+    # now loads jiuwenclaw's .env before reading os.environ, which would re-set
+    # OTEL_ENABLED=true mid-test and break the "disabled" assertion.
+    monkeypatch.setattr("jiuwenswarm_instrumentor._env.load_env_for_instrumentor", lambda: None)
     with patch("jiuwenswarm_instrumentor.activate.init_providers", return_value=None) as ip:
         result = activate.activate()
     assert result is False

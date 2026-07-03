@@ -1,0 +1,3 @@
+include setup.py
+include jiuwenswarm_instrumentor.pth
+include README.md

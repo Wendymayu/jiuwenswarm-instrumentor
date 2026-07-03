@@ -1,0 +1,1 @@
+import jiuwenswarm_instrumentor._autoload  # auto-instrumentation; no-op unless OTEL_ENABLED=true

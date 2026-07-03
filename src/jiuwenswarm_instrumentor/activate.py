@@ -20,6 +20,15 @@ def activate() -> bool:
     global _APPLIED
     if _APPLIED:
         return True
+    # Load jiuwenclaw's .env BEFORE reading os.environ: the .pth autoload (and the
+    # jiuwen-instrument CLI) run before jiuwenclaw's own load_dotenv() in app main(),
+    # so OTEL_* vars placed in jiuwenclaw's .env would otherwise be invisible. Cheap
+    # path lookup, no jiuwenclaw import, fail-soft.
+    try:
+        from jiuwenswarm_instrumentor._env import load_env_for_instrumentor
+        load_env_for_instrumentor()
+    except Exception:
+        pass
     cfg = load_config()
     if not cfg.enabled:
         logger.info("[instrumentor] OTEL_ENABLED not set — instrumentation disabled")

@@ -20,9 +20,18 @@ test = ["pytest>=8", "pytest-asyncio>=0.23"]
 
 [project.scripts]
 jiuwen-instrument = "jiuwenswarm_instrumentor.activate:main"
+jiuwen-instrument-install-pth = "jiuwenswarm_instrumentor._install_pth:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+# The wheel-root `jiuwenswarm_instrumentor.pth` is injected by setup.py's build_py
+# cmdclass (data-files does NOT reliably land .pth in site-packages for wheels).
+# A non-editable `pip install .` drops that .pth into site-packages, where CPython's
+# site module runs its `import` line at every interpreter startup → fires
+# _autoload._autoload() in every Python process in this venv, including subprocesses
+# forked by jiuwenclaw.app. Editable installs don't ship the .pth — run
+# `jiuwen-instrument-install-pth` after `pip install -e .` (see _install_pth.py).
 
 # Single source of truth for the version: _version.py. pyproject reads it via
 # setuptools dynamic version (attr), so a release only needs to bump
