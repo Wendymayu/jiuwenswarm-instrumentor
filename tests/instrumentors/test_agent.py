@@ -1,9 +1,17 @@
 # tests/instrumentors/test_agent.py
 from unittest.mock import Mock
+import json
 from opentelemetry import trace
 from opentelemetry.trace import StatusCode
 from jiuwenswarm_instrumentor.instrumentors.agent import instrument_agent
 from jiuwenswarm_instrumentor.metrics import Metrics
+
+
+def _user_input_content(span):
+    """Parse gen_ai.input.messages from the span → the single user message's text."""
+    raw = span.attributes["gen_ai.input.messages"]
+    entries = json.loads(raw)
+    return entries[0]["parts"][0]["content"]
 
 
 class _Card:
@@ -96,28 +104,31 @@ async def test_react_iteration_count(exporter):
 
 
 async def test_agent_records_user_input(exporter):
-    """agent.invoke root span carries this turn's user input (gen_ai.context.user_messages)."""
+    """agent.invoke root span carries this turn's user input as gen_ai.input.messages
+    (standard OTel GenAI attribute; single user message, JSON array)."""
     tracer = trace.get_tracer("t")
     metrics = Metrics(Mock())
     Fake = _fake_agent_cls()
     instrument_agent(tracer, metrics, agent_cls=Fake, log_messages=True, message_max_length=4096)
     await Fake().invoke({"query": "hello jiuwen"}, session=_Session())
     span = exporter.spans[0]
-    assert span.attributes["gen_ai.context.user_messages"] == "hello jiuwen"
+    entries = json.loads(span.attributes["gen_ai.input.messages"])
+    assert entries == [{"role": "user",
+                        "parts": [{"type": "text", "content": "hello jiuwen"}]}]
 
 
 async def test_agent_records_user_input_string(exporter):
-    """Bare-string inputs are recorded verbatim."""
+    """Bare-string inputs are recorded verbatim inside the user message."""
     tracer = trace.get_tracer("t")
     metrics = Metrics(Mock())
     Fake = _fake_agent_cls()
     instrument_agent(tracer, metrics, agent_cls=Fake, log_messages=True)
     await Fake().invoke("ping", session=_Session())
-    assert exporter.spans[0].attributes["gen_ai.context.user_messages"] == "ping"
+    assert _user_input_content(exporter.spans[0]) == "ping"
 
 
 async def test_agent_records_user_input_from_messages(exporter):
-    """List-of-messages inputs surface the user-role message."""
+    """List-of-messages inputs surface the user-role message(s)."""
     tracer = trace.get_tracer("t")
     metrics = Metrics(Mock())
     Fake = _fake_agent_cls()
@@ -129,19 +140,19 @@ async def test_agent_records_user_input_from_messages(exporter):
         {"role": "user", "content": "thanks"},
     ]
     await Fake().invoke(msgs, session=_Session())
-    assert exporter.spans[0].attributes["gen_ai.context.user_messages"] == "what is 1+1\nthanks"
+    assert _user_input_content(exporter.spans[0]) == "what is 1+1\nthanks"
 
 
 async def test_agent_user_input_truncated(exporter):
-    """Long inputs are capped at message_max_length."""
+    """Long inputs are capped at message_max_length (on the content, not the JSON)."""
     tracer = trace.get_tracer("t")
     metrics = Metrics(Mock())
     Fake = _fake_agent_cls()
     instrument_agent(tracer, metrics, agent_cls=Fake, log_messages=True, message_max_length=10)
     await Fake().invoke("x" * 200, session=_Session())
-    val = exporter.spans[0].attributes["gen_ai.context.user_messages"]
-    assert len(val) == 10
-    assert val.endswith("...")
+    content = _user_input_content(exporter.spans[0])
+    assert len(content) == 10
+    assert content.endswith("...")
 
 
 async def test_agent_user_input_disabled_when_log_messages_off(exporter):
@@ -151,4 +162,4 @@ async def test_agent_user_input_disabled_when_log_messages_off(exporter):
     Fake = _fake_agent_cls()
     instrument_agent(tracer, metrics, agent_cls=Fake, log_messages=False)
     await Fake().invoke("secret", session=_Session())
-    assert "gen_ai.context.user_messages" not in exporter.spans[0].attributes
+    assert "gen_ai.input.messages" not in exporter.spans[0].attributes

@@ -1,5 +1,6 @@
 # src/jiuwenswarm_instrumentor/instrumentors/agent.py
 from __future__ import annotations
+import json
 import time
 
 from jiuwenswarm_instrumentor import attributes as A
@@ -58,12 +59,17 @@ def _extract_user_input_text(inputs):
 
 
 def _record_user_input(span, inputs, max_len):
-    """Record the user's input for this turn on the agent.invoke span, so a user
-    can identify which message they sent from the trace's root span."""
+    """Record the user's input for this turn on the agent.invoke span as a standard
+    OTel GenAI ``gen_ai.input.messages`` payload (single user message), so a user
+    can identify which message they sent from the trace's root span. Phoenix and
+    Langfuse both recognize this attribute and render it as the span's input."""
     try:
         text = _extract_user_input_text(inputs)
         if text:
-            span.set_attribute(A.GEN_AI_CONTEXT_USER_MESSAGES, _cap(text, max_len))
+            entry = {"role": "user",
+                     "parts": [{"type": "text", "content": _cap(text, max_len)}]}
+            span.set_attribute(A.GEN_AI_INPUT_MESSAGES,
+                               json.dumps([entry], ensure_ascii=False))
     except Exception:
         pass
 
