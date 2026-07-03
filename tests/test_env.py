@@ -1,7 +1,7 @@
 # tests/test_env.py
 """Tests for _env.load_env_for_instrumentor — the .env bridge that lets OTEL_*
-vars placed in jiuwenclaw's .env reach the instrumentor when activated at
-interpreter startup (before jiuwenclaw's own load_dotenv runs).
+vars placed in jiuwenswarm's .env reach the instrumentor when activated at
+interpreter startup (before jiuwenswarm's own load_dotenv runs).
 """
 from __future__ import annotations
 
@@ -19,11 +19,18 @@ def _write_env(path, text):
     path.write_text(text, encoding="utf-8")
 
 
-def test_loads_jiuwenclaw_env_file_via_data_dir(tmp_path, monkeypatch):
-    """OTEL_* in <JIUWENCLAW_DATA_DIR>/config/.env must reach os.environ."""
+def _clean_data_dir_env(monkeypatch):
+    for k in ("JIUWENSWARM_DATA_DIR", "JIUWENCLAW_DATA_DIR",
+              "JIUWENSWARM_INSTRUMENT_ENV_FILE"):
+        monkeypatch.delenv(k, raising=False)
+
+
+def test_loads_jiuwenswarm_env_file_via_data_dir(tmp_path, monkeypatch):
+    """OTEL_* in <JIUWENSWARM_DATA_DIR>/config/.env must reach os.environ."""
+    _clean_data_dir_env(monkeypatch)
     env = tmp_path / "config" / ".env"
     _write_env(env, "OTEL_ENABLED=true\nOTEL_SERVICE_NAME=from-dotenv\n")
-    monkeypatch.setenv("JIUWENCLAW_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("JIUWENSWARM_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("OTEL_ENABLED", raising=False)
     monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
 
@@ -33,13 +40,27 @@ def test_loads_jiuwenclaw_env_file_via_data_dir(tmp_path, monkeypatch):
     assert os.environ.get("OTEL_SERVICE_NAME") == "from-dotenv"
 
 
+def test_loads_jiuwenclaw_env_file_fallback(tmp_path, monkeypatch):
+    """jiuwenclaw data dir is still honored as a fallback (enterprise/old name)."""
+    _clean_data_dir_env(monkeypatch)
+    env = tmp_path / "config" / ".env"
+    _write_env(env, "OTEL_ENABLED=true\n")
+    monkeypatch.setenv("JIUWENCLAW_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("OTEL_ENABLED", raising=False)
+
+    load_env_for_instrumentor()
+
+    assert os.environ.get("OTEL_ENABLED") == "true"
+
+
 def test_explicit_override_path_wins(tmp_path, monkeypatch):
     """JIUWENSWARM_INSTRUMENT_ENV_FILE points at an explicit .env to load."""
+    _clean_data_dir_env(monkeypatch)
     env = tmp_path / "custom.env"
     _write_env(env, "OTEL_TRACES_EXPORTER=console\n")
     monkeypatch.setenv("JIUWENSWARM_INSTRUMENT_ENV_FILE", str(env))
-    # Point JIUWENCLAW_DATA_DIR at a dir with NO .env so the jiuwenclaw path is absent.
-    monkeypatch.setenv("JIUWENCLAW_DATA_DIR", str(tmp_path / "nope"))
+    # Point JIUWENSWARM_DATA_DIR at a dir with NO .env so the data-dir path is absent.
+    monkeypatch.setenv("JIUWENSWARM_DATA_DIR", str(tmp_path / "nope"))
     monkeypatch.delenv("OTEL_TRACES_EXPORTER", raising=False)
 
     load_env_for_instrumentor()
@@ -49,9 +70,10 @@ def test_explicit_override_path_wins(tmp_path, monkeypatch):
 
 def test_does_not_clobber_existing_shell_var(tmp_path, monkeypatch):
     """override=False: a var already in os.environ must NOT be overwritten by .env."""
+    _clean_data_dir_env(monkeypatch)
     env = tmp_path / "config" / ".env"
     _write_env(env, "OTEL_SERVICE_NAME=from-dotenv\n")
-    monkeypatch.setenv("JIUWENCLAW_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("JIUWENSWARM_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("OTEL_SERVICE_NAME", "from-shell")
 
     load_env_for_instrumentor()
@@ -61,7 +83,8 @@ def test_does_not_clobber_existing_shell_var(tmp_path, monkeypatch):
 
 def test_missing_file_is_silent(tmp_path, monkeypatch):
     """No .env present → no error, no spurious vars."""
-    monkeypatch.setenv("JIUWENCLAW_DATA_DIR", str(tmp_path / "absent"))
+    _clean_data_dir_env(monkeypatch)
+    monkeypatch.setenv("JIUWENSWARM_DATA_DIR", str(tmp_path / "absent"))
     monkeypatch.delenv("OTEL_ENABLED", raising=False)
     load_env_for_instrumentor()  # must not raise
     assert os.environ.get("OTEL_ENABLED") is None
@@ -69,15 +92,17 @@ def test_missing_file_is_silent(tmp_path, monkeypatch):
 
 def test_candidate_paths_resolve_data_dir(monkeypatch):
     from jiuwenswarm_instrumentor._env import _candidate_env_files
-    monkeypatch.setenv("JIUWENCLAW_DATA_DIR", "/opt/jc")
-    monkeypatch.delenv("JIUWENSWARM_INSTRUMENT_ENV_FILE", raising=False)
+    _clean_data_dir_env(monkeypatch)
+    monkeypatch.setenv("JIUWENSWARM_DATA_DIR", "/opt/jws")
     paths = _candidate_env_files()
-    assert any(p.replace("\\", "/").endswith("/opt/jc/config/.env") for p in paths)
+    assert any(p.replace("\\", "/").endswith("/opt/jws/config/.env") for p in paths)
 
 
 def test_candidate_paths_default_home(monkeypatch):
     from jiuwenswarm_instrumentor._env import _candidate_env_files
-    monkeypatch.delenv("JIUWENCLAW_DATA_DIR", raising=False)
-    monkeypatch.delenv("JIUWENSWARM_INSTRUMENT_ENV_FILE", raising=False)
+    _clean_data_dir_env(monkeypatch)
     paths = _candidate_env_files()
+    # jiuwenswarm primary
+    assert any(p.replace("\\", "/").endswith("/.jiuwenswarm/config/.env") for p in paths)
+    # jiuwenclaw fallback
     assert any(p.replace("\\", "/").endswith("/.jiuwenclaw/config/.env") for p in paths)
