@@ -1,5 +1,6 @@
 # src/jiuwenswarm_instrumentor/instrumentors/agent.py
 from __future__ import annotations
+import json
 import time
 
 from jiuwenswarm_instrumentor import attributes as A
@@ -15,7 +16,65 @@ def _session_id(session):
         return None
 
 
-def instrument_agent(tracer, metrics, *, agent_cls=None):
+def _cap(text, max_len):
+    text = "" if text is None else str(text)
+    return text if len(text) <= max_len else text[: max_len - 3] + "..."
+
+
+def _extract_user_input_text(inputs):
+    """Best-effort extract this turn's user input text from ReActAgent.invoke `inputs`.
+
+    `inputs` varies by caller: a bare string, a dict (e.g. {"query": ...}), or a
+    list of chat messages. We prefer an explicit `user`-role message, then common
+    dict keys, then a plain string, finally str() as a fallback. Fail-soft → "".
+    """
+    try:
+        if inputs is None:
+            return ""
+        if isinstance(inputs, str):
+            return inputs
+        if isinstance(inputs, dict):
+            for k in ("content", "query", "message", "text", "input", "prompt"):
+                v = inputs.get(k)
+                if isinstance(v, str) and v:
+                    return v
+            msgs = inputs.get("messages")
+            if isinstance(msgs, list):
+                return _extract_user_input_text(msgs)
+            return str(inputs)
+        if isinstance(inputs, (list, tuple)):
+            parts = []
+            for m in inputs:
+                role = m.get("role") if isinstance(m, dict) else getattr(m, "role", None)
+                if role == "user":
+                    c = m.get("content") if isinstance(m, dict) else getattr(m, "content", "")
+                    if c:
+                        parts.append(str(c))
+            if parts:
+                return "\n".join(parts)
+            return str(inputs)
+        return str(inputs)
+    except Exception:
+        return ""
+
+
+def _record_user_input(span, inputs, max_len):
+    """Record the user's input for this turn on the agent.invoke span as a standard
+    OTel GenAI ``gen_ai.input.messages`` payload (single user message), so a user
+    can identify which message they sent from the trace's root span. Phoenix and
+    Langfuse both recognize this attribute and render it as the span's input."""
+    try:
+        text = _extract_user_input_text(inputs)
+        if text:
+            entry = {"role": "user",
+                     "parts": [{"type": "text", "content": _cap(text, max_len)}]}
+            span.set_attribute(A.GEN_AI_INPUT_MESSAGES,
+                               json.dumps([entry], ensure_ascii=False))
+    except Exception:
+        pass
+
+
+def instrument_agent(tracer, metrics, *, agent_cls=None, log_messages=False, message_max_length=4096):
     """Wrap ReActAgent.invoke (openjiuwen 0.1.10, react_agent.py:1506).
 
     NOTE: openjiuwen's BaseAgent metaclass rebinds invoke as a per-instance attribute at
@@ -41,6 +100,8 @@ def instrument_agent(tracer, metrics, *, agent_cls=None):
             start = time.monotonic()
             try:
                 with tracer.start_as_current_span("jiuwenclaw.agent.invoke", kind=SpanKind.INTERNAL, attributes=attrs) as span:
+                    if log_messages:
+                        _record_user_input(span, inputs, message_max_length)
                     try:
                         result = await original(self, inputs, session, **kwargs)
                         rt = result.get("result_type") if isinstance(result, dict) else None
