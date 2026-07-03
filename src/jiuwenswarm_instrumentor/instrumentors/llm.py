@@ -265,11 +265,14 @@ def instrument_llm(tracer, metrics, *, log_messages=False, message_max_length=40
                 if finish:
                     span.set_attribute(A.GEN_AI_RESPONSE_FINISH_REASON, finish)
                 if log_messages:
-                    if output_parts:
-                        _record_output_message(span, "".join(output_parts), None, message_max_length)
-                    elif tool_call_acc:
-                        assembled = [tool_call_acc[k] for k in sorted(tool_call_acc)]
-                        _record_output_message(span, "", assembled, message_max_length)
+                    # Record both text AND tool_calls when present. The previous
+                    # if/elif dropped tool_calls whenever the assistant also emitted
+                    # text (the common ReAct case: "let me check..." + a tool_call),
+                    # so the LLM's tool-call INTENT (name + arguments) was lost even
+                    # though finish_reason was tool_calls.
+                    text = "".join(output_parts)
+                    assembled = [tool_call_acc[k] for k in sorted(tool_call_acc)] if tool_call_acc else None
+                    _record_output_message(span, text, assembled, message_max_length)
                 span.set_status(StatusCode.OK)
             except Exception as exc:
                 span.set_status(StatusCode.ERROR, str(exc)[:256])

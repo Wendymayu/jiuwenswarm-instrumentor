@@ -1,5 +1,6 @@
 # tests/instrumentors/test_llm.py
 from unittest.mock import Mock
+import json
 import pytest
 from opentelemetry import trace
 from opentelemetry.trace import StatusCode
@@ -122,6 +123,63 @@ async def test_stream_creates_span_with_ttft_and_final_usage(exporter):
     assert span.attributes["gen_ai.usage.output_tokens"] == 3
     assert span.attributes["gen_ai.usage.estimated"] is True
     assert "gen_ai.context.user_messages" in span.attributes
+
+
+class _TC:
+    """A tool-call delta as a stream chunk would carry it."""
+    def __init__(self, idx, id, name, args):
+        self.index = idx; self.id = id; self.name = name; self.arguments = args
+
+
+class _Chunk:
+    """Minimal stream chunk: content (text) + optional tool_calls + usage + finish."""
+    def __init__(self, content="", tool_calls=None, usage=None, finish="stop"):
+        self.content = content
+        self.tool_calls = tool_calls
+        self.usage_metadata = usage
+        self.finish_reason = finish
+        self.reasoning_content = None
+
+
+async def test_stream_records_text_and_tool_calls_together(exporter):
+    """ReAct case: the LLM streams BOTH assistant text AND a tool_call (finish
+    reason tool_calls). gen_ai.output.messages must contain BOTH the text content
+    and the tool_calls (the LLM's tool-call INTENT: name + arguments) — not drop
+    one when the other is present (regression: text branch used to null tool_calls)."""
+    tracer = trace.get_tracer("t")
+    metrics = Metrics(Mock())
+
+    class _ModelConfig:
+        model_name = "gpt-x"; temperature = 0.7; top_p = None
+    class _ClientConfig:
+        client_provider = "OpenAI"
+
+    class FakeModelClient:
+        model_config = _ModelConfig()
+        model_client_config = _ClientConfig()
+
+        async def stream(self, messages, **kw):
+            yield _Chunk(content="let me check cpu",
+                         tool_calls=[_TC(0, "call_1", "powershell", '{"command":"Get-Cpu"}')],
+                         finish="tool_calls")
+            yield _Chunk(content="", tool_calls=None, usage=_Usage(5, 3, 8),
+                         finish="tool_calls")
+
+    instrument_llm(tracer, metrics, log_messages=True, message_max_length=4096,
+                   model_client_cls=FakeModelClient)
+
+    async for _ in FakeModelClient().stream([{"role": "user", "content": "cpu?"}]):
+        pass
+
+    span = exporter.spans[0]
+    assert span.attributes["gen_ai.response.finish_reason"] == "tool_calls"
+    out = json.loads(span.attributes["gen_ai.output.messages"])
+    assert out[0]["role"] == "assistant"
+    assert out[0]["parts"][0]["content"] == "let me check cpu"
+    tc = out[0]["tool_calls"][0]
+    assert tc["name"] == "powershell"
+    assert tc["id"] == "call_1"
+    assert "Get-Cpu" in tc["arguments"]
 
 
 async def test_invoke_exception_sets_error_and_reraises(exporter):
