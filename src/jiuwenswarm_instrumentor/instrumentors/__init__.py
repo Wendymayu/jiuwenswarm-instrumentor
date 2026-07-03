@@ -37,11 +37,14 @@ def apply_instrumentors(tracer, meter, cfg):
             logger.exception("[instrumentor] failed to apply logs — skipping")
 
     if getattr(cfg, "traces_exporter", "none") != "none":
-        try:
-            gateway.instrument_gateway(tracer)
-            logger.info("[instrumentor] applied gateway")
-        except Exception:
-            logger.exception("[instrumentor] failed to apply gateway — skipping")
+        if getattr(cfg, "instrument_gateway", False):
+            try:
+                gateway.instrument_gateway(tracer)
+                logger.info("[instrumentor] applied gateway")
+            except Exception:
+                logger.exception("[instrumentor] failed to apply gateway — skipping")
+        else:
+            logger.info("[instrumentor] gateway disabled (OTEL_INSTRUMENT_GATEWAY!=true) — skipping")
         try:
             agentserver.instrument_agentserver(tracer)
             logger.info("[instrumentor] applied agentserver")

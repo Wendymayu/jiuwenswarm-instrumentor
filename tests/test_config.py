@@ -88,3 +88,20 @@ def test_log_messages_can_be_disabled():
     finally:
         del os.environ["OTEL_LOG_MESSAGES"]
     assert cfg.log_messages is False
+
+
+def test_instrument_gateway_default_false():
+    """Gateway instrumentation is OFF by default — gateway data is tangential to
+    agent traces. Opt in with OTEL_INSTRUMENT_GATEWAY=true."""
+    cfg = load_config()
+    assert cfg.instrument_gateway is False
+
+
+def test_instrument_gateway_can_be_enabled():
+    """OTEL_INSTRUMENT_GATEWAY=true opts into gateway spans + traceparent inject."""
+    os.environ["OTEL_INSTRUMENT_GATEWAY"] = "true"
+    try:
+        cfg = load_config()
+    finally:
+        del os.environ["OTEL_INSTRUMENT_GATEWAY"]
+    assert cfg.instrument_gateway is True
