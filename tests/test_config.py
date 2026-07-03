@@ -15,6 +15,7 @@ def test_disabled_by_default():
     assert cfg.enabled is False
     assert cfg.traces_exporter == "none"
     assert cfg.protocol == "grpc"
+    assert cfg.log_messages is True  # default captures prompt/response + agent user input
 
 
 def test_env_overrides():
@@ -34,7 +35,7 @@ def test_env_overrides():
     assert cfg.traces_endpoint == "http://localhost:4317"
     assert cfg.traces_protocol == "http"
     assert cfg.service_name == "jiuwenclaw-prod"
-    assert cfg.log_messages is False
+    assert cfg.log_messages is True  # default; OTEL_LOG_MESSAGES not overridden here
 
 
 def test_generic_headers_with_signal_overlay():
@@ -77,3 +78,13 @@ def test_logs_env_overrides():
     assert cfg.log_level == "DEBUG"
     assert cfg.log_excluded_loggers == ("a", "b")
     assert cfg.log_message_max_length == 100
+
+
+def test_log_messages_can_be_disabled():
+    """Privacy opt-out: OTEL_LOG_MESSAGES=false turns off prompt/response + agent user input."""
+    os.environ["OTEL_LOG_MESSAGES"] = "false"
+    try:
+        cfg = load_config()
+    finally:
+        del os.environ["OTEL_LOG_MESSAGES"]
+    assert cfg.log_messages is False

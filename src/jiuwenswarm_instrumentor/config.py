@@ -16,7 +16,7 @@ class InstrumentorConfig:
     metrics_headers: dict = None
     protocol: str = "grpc"
     service_name: str = "jiuwenswarm"
-    log_messages: bool = False           # opt-in full prompt/response capture
+    log_messages: bool = True           # default true: capture prompt/response + tool args/result (set false for privacy)
     message_max_length: int = 4096
     logs_exporter: str = "none"          # otlp | console | none
     logs_endpoint: str = "http://localhost:4317"
@@ -69,7 +69,7 @@ def load_config() -> InstrumentorConfig:
         metrics_headers={**base_headers, **_headers("OTEL_EXPORTER_OTLP_METRICS_HEADERS")},
         protocol=protocol,
         service_name=_str("OTEL_SERVICE_NAME", "jiuwenclaw"),
-        log_messages=_bool("OTEL_LOG_MESSAGES", False),
+        log_messages=_bool("OTEL_LOG_MESSAGES", True),
         message_max_length=int(_str("OTEL_MESSAGE_CONTENT_MAX_LENGTH", "4096") or 4096),
         logs_exporter=_lower("OTEL_LOGS_EXPORTER", "none"),
         logs_endpoint=_str("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", endpoint),
