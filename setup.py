@@ -7,9 +7,9 @@
 # startup. `data-files` cannot do this reliably for wheels (it lands files in a
 # prefix-relative data dir, not site-packages), hence the custom command.
 #
-# Editable installs do not run build_py the same way and will not ship the .pth;
-# for dev use `jiuwen-instrument <module>` or set PYTHONPATH to a dir containing
-# a sitecustomize.py that calls jiuwenswarm_instrumentor.activate.activate().
+# Editable installs do not run build_py and will not ship the .pth; for dev run
+# `pip install -e .` then `jiuwen-instrument-install-pth` (writes the same .pth
+# into site-packages manually) — see _install_pth.py.
 import os
 import shutil
 
