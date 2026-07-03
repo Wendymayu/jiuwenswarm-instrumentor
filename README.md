@@ -43,6 +43,7 @@ import jiuwenswarm_instrumentor; jiuwenswarm_instrumentor.setup()
 | `OTEL_SERVICE_NAME` | `jiuwenswarm` | 服务名 |
 | `OTEL_EXPORTER_OTLP_HEADERS` | - | 逗号分隔 `k=v` 鉴权头 |
 | `OTEL_LOG_MESSAGES` | `true` | 完整消息内容采集（prompt/response + tool 参数/结果 + agent 用户输入）。隐私敏感设 `false` |
+| `OTEL_MESSAGE_CONTENT_MAX_LENGTH` | `4096` | 单条消息/工具内容字符截断阈值。设 `0` / `none` / `off` 关闭截断（采集完整内容，体积更大）。日志体见 `OTEL_LOG_MESSAGE_MAX_LENGTH`（默认 `8192`，同样支持 `0`） |
 | `OTEL_INSTRUMENT_GATEWAY` | `false` | 是否采集 gateway 可观测数据(`channel.request`/`jiuwenswarm.gateway.agent.request` span + traceparent 注入)。默认关:与 agent 行为无关,`agent.invoke` 直接作为根 trace。想看 gateway 或要跨进程链路时设 `true` |
 
 ## 采集的信号

@@ -105,3 +105,34 @@ def test_instrument_gateway_can_be_enabled():
     finally:
         del os.environ["OTEL_INSTRUMENT_GATEWAY"]
     assert cfg.instrument_gateway is True
+
+
+def test_message_max_length_defaults_and_overrides():
+    cfg = load_config()
+    assert cfg.message_max_length == 4096
+    os.environ["OTEL_MESSAGE_CONTENT_MAX_LENGTH"] = "200"
+    try:
+        cfg = load_config()
+    finally:
+        del os.environ["OTEL_MESSAGE_CONTENT_MAX_LENGTH"]
+    assert cfg.message_max_length == 200
+
+
+@pytest.mark.parametrize("val", ["0", "none", "off", "NONE", "Off"])
+def test_message_max_length_zero_means_no_truncation(val):
+    """0 / none / off → 0 (no truncation). Regression: 0 used to slice text[:-3]."""
+    os.environ["OTEL_MESSAGE_CONTENT_MAX_LENGTH"] = val
+    try:
+        cfg = load_config()
+    finally:
+        del os.environ["OTEL_MESSAGE_CONTENT_MAX_LENGTH"]
+    assert cfg.message_max_length == 0
+
+
+def test_message_max_length_garbage_falls_back():
+    os.environ["OTEL_MESSAGE_CONTENT_MAX_LENGTH"] = "not-a-number"
+    try:
+        cfg = load_config()
+    finally:
+        del os.environ["OTEL_MESSAGE_CONTENT_MAX_LENGTH"]
+    assert cfg.message_max_length == 4096

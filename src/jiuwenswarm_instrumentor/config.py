@@ -17,14 +17,14 @@ class InstrumentorConfig:
     protocol: str = "grpc"
     service_name: str = "jiuwenswarm"
     log_messages: bool = True           # default true: capture prompt/response + tool args/result (set false for privacy)
-    message_max_length: int = 4096
+    message_max_length: int = 4096      # cap per-message/tool content chars; 0 (or none/off) = no truncation
     logs_exporter: str = "none"          # otlp | console | none
     logs_endpoint: str = "http://localhost:4317"
     logs_protocol: str = "grpc"          # grpc | http
     logs_headers: dict = None
     log_level: str = "INFO"              # NOTSET|DEBUG|INFO|WARNING|ERROR|CRITICAL
     log_excluded_loggers: tuple = ()
-    log_message_max_length: int = 8192
+    log_message_max_length: int = 8192  # cap per-log-record body chars; 0 (or none/off) = no truncation
     instrument_gateway: bool = False      # OTEL_INSTRUMENT_GATEWAY=true → opt into gateway spans + traceparent inject (off by default: gateway data is tangential to agent traces; agent.invoke is a standalone root when off)
 
 
@@ -54,6 +54,21 @@ def _headers(key):
     return out
 
 
+def _max_length(key, default):
+    """Parse a max-length env var. "" → default; "0"/"none"/"off" → 0 (no truncation);
+    negative or unparseable → default. Otherwise the parsed int."""
+    raw = (os.getenv(key) or "").strip().lower()
+    if raw == "":
+        return default
+    if raw in ("0", "none", "off"):
+        return 0
+    try:
+        n = int(raw)
+    except ValueError:
+        return default
+    return n if n > 0 else 0
+
+
 def load_config() -> InstrumentorConfig:
     protocol = _lower("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc")
     endpoint = _str("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
@@ -71,7 +86,7 @@ def load_config() -> InstrumentorConfig:
         protocol=protocol,
         service_name=_str("OTEL_SERVICE_NAME", "jiuwenclaw"),
         log_messages=_bool("OTEL_LOG_MESSAGES", True),
-        message_max_length=int(_str("OTEL_MESSAGE_CONTENT_MAX_LENGTH", "4096") or 4096),
+        message_max_length=_max_length("OTEL_MESSAGE_CONTENT_MAX_LENGTH", 4096),
         logs_exporter=_lower("OTEL_LOGS_EXPORTER", "none"),
         logs_endpoint=_str("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", endpoint),
         logs_protocol=_lower("OTEL_EXPORTER_OTLP_LOGS_PROTOCOL", protocol),
@@ -80,6 +95,6 @@ def load_config() -> InstrumentorConfig:
         log_excluded_loggers=tuple(
             s.strip() for s in _str("OTEL_LOGS_EXCLUDED_LOGGERS", "jiuwenclaw.interface.resp").split(",") if s.strip()
         ),
-        log_message_max_length=int(_str("OTEL_LOG_MESSAGE_MAX_LENGTH", "8192") or 8192),
+        log_message_max_length=_max_length("OTEL_LOG_MESSAGE_MAX_LENGTH", 8192),
         instrument_gateway=_bool("OTEL_INSTRUMENT_GATEWAY", False),
     )

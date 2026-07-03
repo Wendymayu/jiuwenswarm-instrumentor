@@ -12,6 +12,8 @@ from opentelemetry.trace import StatusCode, SpanKind
 
 def _cap(text, max_len):
     text = "" if text is None else str(text)
+    if not max_len or max_len <= 0:  # 0 / none / off → no truncation
+        return text
     return text if len(text) <= max_len else text[: max_len - 3] + "..."
 
 
