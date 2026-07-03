@@ -95,13 +95,19 @@ def _enrich_skill_release(span, tool_call, session, metrics, is_error):
 
 
 def instrument_tool(tracer, metrics, *, log_messages=False, message_max_length=4096, ability_cls=None):
-    """Wrap AbilityManager.execute_single (openjiuwen 0.1.10, ability_manager.py:635)."""
+    """Wrap AbilityManager._execute_single_tool_call (openjiuwen 0.1.15).
+
+    openjiuwen 0.1.15 renamed the per-tool entry from ``execute_single`` (0.1.10)
+    to ``_execute_single_tool_call``; the public ``execute`` now batches multiple
+    tool calls. Patching the per-call private method preserves one ``gen_ai.tool``
+    span per tool call (matching the old granularity).
+    """
     if ability_cls is None:
         from openjiuwen.core.single_agent.ability_manager import AbilityManager
         ability_cls = AbilityManager
 
     def factory(original):
-        async def traced(self, parent_ctx, tool_call, session, tag=None):
+        async def traced(self, tool_call, session, tag=None):
             name = getattr(tool_call, "name", "unknown")
             call_id = getattr(tool_call, "id", "") or ""
             attrs = {
@@ -114,7 +120,7 @@ def instrument_tool(tracer, metrics, *, log_messages=False, message_max_length=4
             start = time.monotonic()
             with tracer.start_as_current_span("gen_ai.tool", kind=SpanKind.CLIENT, attributes=attrs) as span:
                 try:
-                    result = await original(self, parent_ctx, tool_call, session, tag=tag)
+                    result = await original(self, tool_call, session, tag=tag)
                     tool_msg = result[1] if isinstance(result, tuple) and len(result) >= 2 else None
                     is_error = bool(
                         tool_msg is not None
@@ -140,4 +146,4 @@ def instrument_tool(tracer, metrics, *, log_messages=False, message_max_length=4
                     metrics.record_tool(time.monotonic() - start, base)
         return traced
 
-    patch_method(ability_cls, "execute_single", factory)
+    patch_method(ability_cls, "_execute_single_tool_call", factory)

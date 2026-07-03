@@ -15,23 +15,19 @@ class _ToolMsg:
         self.content = "ok"; self.tool_call_id = "tc1"; self.metadata = {}
 
 
-class _Ctx:
-    pass
-
-
 def _fake_ability_cls():
     class FakeAbility:
-        async def execute_single(self, parent_ctx, tool_call, session, tag=None):
-            return ("result", _ToolMsg(), _Ctx())
+        async def _execute_single_tool_call(self, tool_call, session, tag=None):
+            return ("result", _ToolMsg())
     return FakeAbility
 
 
 def _fake_ability_error_cls():
     class FakeAbilityErr:
-        async def execute_single(self, parent_ctx, tool_call, session, tag=None):
+        async def _execute_single_tool_call(self, tool_call, session, tag=None):
             msg = _ToolMsg()
             msg.metadata = {"is_error": True}
-            return ("err", msg, _Ctx())
+            return ("err", msg)
     return FakeAbilityErr
 
 
@@ -40,7 +36,7 @@ async def test_tool_span(exporter):
     metrics = Metrics(Mock())
     Fake = _fake_ability_cls()
     instrument_tool(tracer, metrics, ability_cls=Fake)
-    res = await Fake().execute_single(_Ctx(), _ToolCall(), session=None)
+    res = await Fake()._execute_single_tool_call(_ToolCall(), session=None)
     assert res[1].content == "ok"
     assert len(exporter.spans) == 1
     span = exporter.spans[0]
@@ -55,7 +51,7 @@ async def test_tool_error_sets_error_status(exporter):
     metrics = Metrics(Mock())
     Fake = _fake_ability_error_cls()
     instrument_tool(tracer, metrics, ability_cls=Fake)
-    await Fake().execute_single(_Ctx(), _ToolCall(), session=None)
+    await Fake()._execute_single_tool_call(_ToolCall(), session=None)
     span = exporter.spans[0]
     assert span.name == "gen_ai.tool"
     assert span.status.status_code == StatusCode.ERROR
