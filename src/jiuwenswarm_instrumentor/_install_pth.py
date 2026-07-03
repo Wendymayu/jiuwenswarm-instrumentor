@@ -34,7 +34,7 @@ import sys
 _PTH_NAME = "jiuwenswarm_instrumentor.pth"
 _PTH_CONTENT = (
     "import jiuwenswarm_instrumentor._autoload  "
-    "# auto-instrumentation; no-op unless OTEL_ENABLED=true\n"
+    "# auto-instrumentation; no-op unless OTEL_INSTRUMENTOR_ENABLED=true\n"
 )
 
 
@@ -103,7 +103,7 @@ def install_pth() -> int:
         f.write(_PTH_CONTENT)
     print(f"[instrumentor] wrote {_PTH_NAME} -> {path}")
     print("[instrumentor] autoload now fires at every python startup in this venv")
-    print("[instrumentor] set OTEL_ENABLED=true to activate; "
+    print("[instrumentor] set OTEL_INSTRUMENTOR_ENABLED=true to activate; "
           "OTEL_LOG_MESSAGES / OTEL_INSTRUMENT_GATEWAY to tune")
     return 0
 

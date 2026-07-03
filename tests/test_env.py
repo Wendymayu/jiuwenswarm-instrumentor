@@ -22,14 +22,14 @@ def _write_env(path, text):
 def test_loads_jiuwenclaw_env_file_via_data_dir(tmp_path, monkeypatch):
     """OTEL_* in <JIUWENCLAW_DATA_DIR>/config/.env must reach os.environ."""
     env = tmp_path / "config" / ".env"
-    _write_env(env, "OTEL_ENABLED=true\nOTEL_SERVICE_NAME=from-dotenv\n")
+    _write_env(env, "OTEL_INSTRUMENTOR_ENABLED=true\nOTEL_SERVICE_NAME=from-dotenv\n")
     monkeypatch.setenv("JIUWENCLAW_DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("OTEL_ENABLED", raising=False)
+    monkeypatch.delenv("OTEL_INSTRUMENTOR_ENABLED", raising=False)
     monkeypatch.delenv("OTEL_SERVICE_NAME", raising=False)
 
     load_env_for_instrumentor()
 
-    assert os.environ.get("OTEL_ENABLED") == "true"
+    assert os.environ.get("OTEL_INSTRUMENTOR_ENABLED") == "true"
     assert os.environ.get("OTEL_SERVICE_NAME") == "from-dotenv"
 
 
@@ -62,9 +62,9 @@ def test_does_not_clobber_existing_shell_var(tmp_path, monkeypatch):
 def test_missing_file_is_silent(tmp_path, monkeypatch):
     """No .env present → no error, no spurious vars."""
     monkeypatch.setenv("JIUWENCLAW_DATA_DIR", str(tmp_path / "absent"))
-    monkeypatch.delenv("OTEL_ENABLED", raising=False)
+    monkeypatch.delenv("OTEL_INSTRUMENTOR_ENABLED", raising=False)
     load_env_for_instrumentor()  # must not raise
-    assert os.environ.get("OTEL_ENABLED") is None
+    assert os.environ.get("OTEL_INSTRUMENTOR_ENABLED") is None
 
 
 def test_candidate_paths_resolve_data_dir(monkeypatch):

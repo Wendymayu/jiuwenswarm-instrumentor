@@ -13,7 +13,7 @@ def _clean_env(monkeypatch):
 def test_disabled_by_default():
     cfg = load_config()
     assert cfg.enabled is False
-    # exporters default to otlp (dev convenience: only OTEL_ENABLED needed)
+    # exporters default to otlp (dev convenience: only OTEL_INSTRUMENTOR_ENABLED needed)
     assert cfg.traces_exporter == "otlp"
     assert cfg.metrics_exporter == "otlp"
     assert cfg.protocol == "grpc"
@@ -22,7 +22,7 @@ def test_disabled_by_default():
 
 
 def test_env_overrides():
-    os.environ["OTEL_ENABLED"] = "true"
+    os.environ["OTEL_INSTRUMENTOR_ENABLED"] = "true"
     os.environ["OTEL_TRACES_EXPORTER"] = "otlp"
     os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = "http://localhost:4317"
     os.environ["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http"
@@ -30,7 +30,7 @@ def test_env_overrides():
     try:
         cfg = load_config()
     finally:
-        del os.environ["OTEL_ENABLED"]; del os.environ["OTEL_TRACES_EXPORTER"]
+        del os.environ["OTEL_INSTRUMENTOR_ENABLED"]; del os.environ["OTEL_TRACES_EXPORTER"]
         del os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"]; del os.environ["OTEL_EXPORTER_OTLP_PROTOCOL"]
         del os.environ["OTEL_SERVICE_NAME"]
     assert cfg.enabled is True
@@ -55,20 +55,41 @@ def test_generic_headers_with_signal_overlay():
 
 
 def test_only_enabled_yields_working_otlp_defaults():
-    """Dev DX: setting ONLY OTEL_ENABLED=true must produce a complete working config
-    (otlp exporters, grpc to 4317, log_messages on) — no other vars required for a
-    local grpc backend (labubu/Phoenix)."""
-    os.environ["OTEL_ENABLED"] = "true"
+    """Dev DX: setting ONLY OTEL_INSTRUMENTOR_ENABLED=true must produce a complete
+    working config (otlp exporters, grpc to 4317, log_messages on) — no other vars
+    required for a local grpc backend (labubu/Phoenix)."""
+    os.environ["OTEL_INSTRUMENTOR_ENABLED"] = "true"
     try:
         cfg = load_config()
     finally:
-        del os.environ["OTEL_ENABLED"]
+        del os.environ["OTEL_INSTRUMENTOR_ENABLED"]
     assert cfg.enabled is True
     assert cfg.traces_exporter == "otlp"
     assert cfg.metrics_exporter == "otlp"
     assert cfg.traces_protocol == "grpc"
     assert cfg.traces_endpoint == "http://localhost:4317"
     assert cfg.log_messages is True
+
+
+def test_otel_enabled_does_not_activate_instrumentor():
+    """enterprise_dev split: OTEL_ENABLED gates jiuwenclaw's BUILT-IN telemetry, NOT
+    this standalone probe. Setting OTEL_ENABLED=true must leave cfg.enabled False so
+    the two don't double-export. Revert this test when the built-in module is removed."""
+    os.environ["OTEL_ENABLED"] = "true"
+    try:
+        cfg = load_config()
+    finally:
+        del os.environ["OTEL_ENABLED"]
+    assert cfg.enabled is False
+
+
+def test_instrumentor_enabled_activates_instrumentor():
+    os.environ["OTEL_INSTRUMENTOR_ENABLED"] = "true"
+    try:
+        cfg = load_config()
+    finally:
+        del os.environ["OTEL_INSTRUMENTOR_ENABLED"]
+    assert cfg.enabled is True
 
 
 def test_log_messages_can_be_disabled():

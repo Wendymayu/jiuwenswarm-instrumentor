@@ -6,9 +6,11 @@ jiuwenswarm 智能体的可观测数据采集器 —— 独立、自包含的 Op
 
 ```bash
 pip install jiuwenswarm-instrumentor          # 1. 装（非 editable，自带自动加载钩子）
-export OTEL_ENABLED=true                      # 2. 唯一必设项（后端在本地 4317 gRPC 时）
+export OTEL_INSTRUMENTOR_ENABLED=true         # 2. 唯一必设项（后端在本地 4317 gRPC 时）
 python -m jiuwenclaw.app                      # 3. 跑——父 + agentserver + gateway 子进程全自动插桩
 ```
+
+> ⚠️ **enterprise_dev 双开关**：jiuwenswarm 内置可观测模块读 `OTEL_ENABLED`，本独立探针读 `OTEL_INSTRUMENTOR_ENABLED`——两者分离，避免同时安装时数据重复上报。要内置就只设 `OTEL_ENABLED=true`；要用本探针就只设 `OTEL_INSTRUMENTOR_ENABLED=true`（并确认内置未开）。**等内置模块移除后，本探针会改回读 `OTEL_ENABLED`，恢复单开关。**
 
 后端非本地或用 HTTP（如 Langfuse 云端）再加：
 ```bash
@@ -16,7 +18,7 @@ export OTEL_EXPORTER_OTLP_PROTOCOL=http
 export OTEL_EXPORTER_OTLP_ENDPOINT=https://your-backend
 ```
 
-> **Windows 用户**：`export` 是 bash 语法，cmd/PowerShell 不认。cmd 用 `set OTEL_ENABLED=true`，PowerShell 用 `$env:OTEL_ENABLED="true"`，**设完在同一窗口立刻启动**。完整三平台写法见 `docs/observability-quickstart.md`。自检：`set OTEL_ENABLED`(cmd)/`echo $env:OTEL_ENABLED`(PS) 应非空。
+> **Windows 用户**：`export` 是 bash 语法，cmd/PowerShell 不认。cmd 用 `set OTEL_INSTRUMENTOR_ENABLED=true`，PowerShell 用 `$env:OTEL_INSTRUMENTOR_ENABLED="true"`，**设完在同一窗口立刻启动**。完整三平台写法见 `docs/observability-quickstart.md`。自检：`set OTEL_INSTRUMENTOR_ENABLED`(cmd)/`echo $env:OTEL_INSTRUMENTOR_ENABLED`(PS) 应非空。
 
 **成功的判据是后端 UI 能查到 `service=jiuwenclaw` 的 trace**（`[instrumentor] active` 这行 INFO 在 `.pth` 自动加载时可能不显示，不影响上报）。无需改 jiuwenclaw 源码、无需 CLI 包裹：装包时随附的 `jiuwenswarm_instrumentor.pth` 让每个 Python 进程（含 `app.py` fork 的两个子进程）启动即自动激活。
 
@@ -32,8 +34,9 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=https://your-backend
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
-| `OTEL_ENABLED` | `false` | 总开关，关闭时零开销 no-op |
-| `JIUWENSWARM_INSTRUMENT_AUTOLOAD` | (未设) | 设 `false`/`0`/`no`/`off` 关闭 `.pth` 自动加载，即使 `OTEL_ENABLED=true` 也不自动激活（改用 CLI/代码激活时用） |
+| `OTEL_INSTRUMENTOR_ENABLED` | `false` | **本探针总开关**，关闭时零开销 no-op。与 `OTEL_ENABLED` 分离（后者控制 jiuwenclaw 内置可观测模块），避免双上报 |
+| `OTEL_ENABLED` | `false` | jiuwenclaw **内置**可观测模块的总开关（本探针不读它）。内置模块移除后本探针将改回读它 |
+| `JIUWENSWARM_INSTRUMENT_AUTOLOAD` | (未设) | 设 `false`/`0`/`no`/`off` 关闭 `.pth` 自动加载，即使 `OTEL_INSTRUMENTOR_ENABLED=true` 也不自动激活（改用 CLI/代码激活时用） |
 | `OTEL_TRACES_EXPORTER` | `otlp` | `otlp` / `console` / `none` |
 | `OTEL_METRICS_EXPORTER` | `otlp` | `otlp` / `console` / `none` |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` | `grpc` / `http`（HTTP 后端如 Langfuse 改 `http`） |
@@ -63,7 +66,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=https://your-backend
 不想接后端,把 exporter 设成 `console`,span 直接打到终端:
 
 ```bash
-OTEL_ENABLED=true OTEL_TRACES_EXPORTER=console python -m jiuwenclaw.app
+OTEL_INSTRUMENTOR_ENABLED=true OTEL_TRACES_EXPORTER=console python -m jiuwenclaw.app
 ```
 
 发一条对话,看到 `gen_ai.chat` / `gen_ai.tool` / `jiuwenclaw.agent.invoke` / `jiuwenclaw.session.*` span 即通。

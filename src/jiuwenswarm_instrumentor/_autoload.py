@@ -11,10 +11,13 @@ caveat (patch the class before any instance is built).
 
 Gating (two switches, both opt-in/out so a default install is a true zero-cost no-op):
 
-* ``OTEL_ENABLED=true`` — the package's existing enable switch. ``activate()`` itself
-  returns ``False`` without it, so an unset env means no providers, no patches, no network.
+* ``OTEL_INSTRUMENTOR_ENABLED=true`` — this package's own master switch, kept
+  separate from ``OTEL_ENABLED`` (which gates jiuwenclaw's *built-in* telemetry on
+  enterprise_dev) so installing this probe alongside the built-in doesn't double-export.
+  ``activate()`` itself returns ``False`` without it, so an unset env means no
+  providers, no patches, no network.
 * ``JIUWENSWARM_INSTRUMENT_AUTOLOAD=false`` (``0``/``no``/``off``) — explicit opt-out for
-  users who set ``OTEL_ENABLED=true`` but drive instrumentation via the
+  users who set ``OTEL_INSTRUMENTOR_ENABLED=true`` but drive instrumentation via the
   ``jiuwen-instrument`` CLI wrapper instead, and don't want every Python process in the
   venv to auto-activate.
 

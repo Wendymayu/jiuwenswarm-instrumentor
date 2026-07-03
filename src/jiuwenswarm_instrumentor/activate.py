@@ -31,7 +31,7 @@ def activate() -> bool:
         pass
     cfg = load_config()
     if not cfg.enabled:
-        logger.info("[instrumentor] OTEL_ENABLED not set — instrumentation disabled")
+        logger.info("[instrumentor] OTEL_INSTRUMENTOR_ENABLED not set — instrumentation disabled")
         return False
     try:
         from jiuwenswarm_instrumentor.model_context import sync_model_context

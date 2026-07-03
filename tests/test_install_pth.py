@@ -20,7 +20,7 @@ def test_install_writes_pth_into_target_dir(monkeypatch, tmp_path):
     assert pth.exists()
     content = pth.read_text(encoding="utf-8")
     assert "import jiuwenswarm_instrumentor._autoload" in content
-    assert "OTEL_ENABLED" in content
+    assert "OTEL_INSTRUMENTOR_ENABLED" in content
 
 
 def test_install_is_idempotent(monkeypatch, tmp_path):

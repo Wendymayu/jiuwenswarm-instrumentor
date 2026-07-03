@@ -5,8 +5,15 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class InstrumentorConfig:
+    # NOTE(enterprise_dev split): this standalone instrumentor has its OWN master
+    # switch `OTEL_INSTRUMENTOR_ENABLED`, separate from `OTEL_ENABLED` which now
+    # exclusively gates jiuwenclaw's *built-in* telemetry module. Without the split,
+    # installing this package alongside the built-in (both reading OTEL_ENABLED)
+    # duplicated every span/metric. Default OFF so a bare install is a no-op.
+    # TODO: once jiuwenclaw's built-in telemetry module is removed, collapse back to
+    # a single switch — revert this field to read OTEL_ENABLED.
     enabled: bool = False
-    traces_exporter: str = "otlp"         # otlp | console | none — default otlp so devs only set OTEL_ENABLED
+    traces_exporter: str = "otlp"         # otlp | console | none — default otlp so devs only set OTEL_INSTRUMENTOR_ENABLED
     traces_endpoint: str = "http://localhost:4317"   # 4317 = grpc (matches default protocol)
     traces_protocol: str = "grpc"        # grpc | http
     traces_headers: dict = None
@@ -74,7 +81,7 @@ def load_config() -> InstrumentorConfig:
     endpoint = _str("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
     base_headers = _headers("OTEL_EXPORTER_OTLP_HEADERS")
     return InstrumentorConfig(
-        enabled=_bool("OTEL_ENABLED", False),
+        enabled=_bool("OTEL_INSTRUMENTOR_ENABLED", False),
         traces_exporter=_lower("OTEL_TRACES_EXPORTER", "otlp"),
         traces_endpoint=_str("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", endpoint),
         traces_protocol=_lower("OTEL_EXPORTER_OTLP_TRACES_PROTOCOL", protocol),
