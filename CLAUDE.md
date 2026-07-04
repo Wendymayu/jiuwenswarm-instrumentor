@@ -34,7 +34,7 @@ In-process auto-instrumentation (no `jiuwenclaw` source edits). At activation (`
 | Agent | `ReActAgent.invoke` | `jiuwenclaw.agent.invoke` |
 | Session | `JiuWenClaw.create_instance` / `.cleanup` | `jiuwenclaw.session.create` / `.end` |
 
-Data flow: patched method → `opentelemetry` SDK (`gen_ai.*` + `jiuwenclaw.*` attributes) → OTLP exporter (gRPC/HTTP) → backend. Config is env-driven (`OTEL_*`, see `config.py`); `OTEL_ENABLED=false` (default) is a zero-cost no-op.
+Data flow: patched method → `opentelemetry` SDK (`gen_ai.*` + `jiuwenclaw.*` attributes) → OTLP exporter (gRPC/HTTP) → backend. Config is env-driven (`OTEL_*`, see `config.py`). On **enterprise_dev** the probe reads its own master switch `OTEL_INSTRUMENTOR_ENABLED` (default false = zero-cost no-op), kept separate from `OTEL_ENABLED` which gates jiuwenclaw's built-in telemetry module — so installing both never double-exports. On **develop** (no built-in) the probe still reads `OTEL_ENABLED`. Revert to a single switch once the built-in module is removed.
 
 ### Metaclass caveat
 `openjiuwen`'s `BaseAgent` metaclass rebinds `invoke` as a per-instance attribute at construction. Instrumentation **must be applied before any agent instance is built** — activation runs at process start, before `jiuwenclaw` constructs agents.

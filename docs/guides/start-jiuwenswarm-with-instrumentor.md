@@ -1,13 +1,13 @@
 # 启动 jiuwenswarm 并带上插桩上报可观测数据
 
-> 本指南基于 `jiuwenswarm-instrumentor`(分支 `feat/instrumentor-impl`)在真实 jiuwenswarm 上跑通 trace + metric 上报到 labubu(或 Phoenix / Langfuse)的实测经验。
+> 本指南基于 `jiuwenswarm-instrumentor`(分支 `enterprise_dev`)在真实 jiuwenswarm 上跑通 trace + metric 上报到 labubu(或 Phoenix / Langfuse)的实测经验。
 
 ## 0. 前置条件
 
 - **jiuwenswarm 仓库**:`D:/code/opensource/gitcode/jiuwenswarm`,分支 `resume_enterprise_dev`(enterprise / deep_agent 架构)。
 - **venv**:`.venv_enterprise_dev`(Python 3.13)。⚠️ 本机默认 `python`/`pip` 是 3.14,被本包 `requires-python = ">=3.11,<3.14"` 拒绝 —— 一律用 `py -3.13` 或该 venv 的 `python.exe`。
 - **可观测后端**:labubu(本机已起,gRPC `:4317` / HTTP `:4318` / UI `:8080` / 前端 `:3001`),或 Phoenix / Langfuse(协议一致,只改 endpoint)。
-- **instrumentor 仓库**:`D:/code/opensource/github/jiuwenswarm-instrumentor`(分支 `feat/instrumentor-impl`)。
+- **instrumentor 仓库**:`D:/code/opensource/github/jiuwenswarm-instrumentor`(分支 `enterprise_dev`)。
 
 ## 1. 一次性 setup(三个动作,均未提交到 jiuwenswarm)
 
@@ -21,10 +21,10 @@ cd D:/code/opensource/gitcode/jiuwenswarm
 # 验证 .pth 落位
 ls .venv_enterprise_dev/Lib/site-packages/ | grep jiuwenswarm_instrumentor.pth
 # 验证
-.venv_enterprise_dev/Scripts/python.exe -c "import jiuwenswarm_instrumentor as j; print(j.__version__)"   # 0.1.0
+.venv_enterprise_dev/Scripts/python.exe -c "import jiuwenswarm_instrumentor as j; print(j.__version__)"   # 0.3.0
 ```
 
-装上后,`OTEL_ENABLED=true` 时**任何** `python` 进程(含 `app.py` fork 的 agentserver/gateway 子进程)启动即自动激活,无需 `jiuwen-instrument` 包裹、无需改 jiuwenclaw 源码。详见 `docs/observability-quickstart.md` 方式 A。
+装上后,`OTEL_INSTRUMENTOR_ENABLED=true` 时**任何** `python` 进程(含 `app.py` fork 的 agentserver/gateway 子进程)启动即自动激活,无需 `jiuwen-instrument` 包裹、无需改 jiuwenclaw 源码。详见 `docs/observability-quickstart.md`。
 
 **替代:editable 安装(改 instrumentor 源码不重装即生效,但不发货 `.pth`,autoload 不生效)**
 
@@ -34,15 +34,17 @@ ls .venv_enterprise_dev/Lib/site-packages/ | grep jiuwenswarm_instrumentor.pth
 
 editable 下要走 2.2/2.3 的两终端 `jiuwen-instrument` 方式,或自配 `PYTHONPATH`+`sitecustomize.py`。
 
-### 1.2 禁用 jiuwenclaw 自带的旧 telemetry(避免双写)
+### 1.2 双开关:无需再手动禁用 jiuwenclaw 内置 telemetry
 
-jiuwenclaw 内置的 `jiuwenclaw/telemetry/` 还在、且会被 `app_agentserver` / `app_gateway` 调用。它会和我们的 instrumentor **同时插桩**(重复 span)。要在 jiuwenswarm 工作树里改 3 处(未提交):
+> ℹ️ **新机制(enterprise_dev)**:本探针读 `OTEL_INSTRUMENTOR_ENABLED`,jiuwenclaw 内置 telemetry 读 `OTEL_ENABLED`——两者分离。**只要你不设 `OTEL_ENABLED`,内置 telemetry 自然 no-op,不会和本探针双写**,因此 1.2 原先那 3 处 jiuwenclaw 源码改动**不再需要**。
 
-- `jiuwenclaw/app_agentserver.py` 第 114 行:`init_telemetry()` → 注释掉。
-- `jiuwenclaw/app_gateway.py` 第 880 行:`init_telemetry()` → 注释掉。
-- `jiuwenclaw/telemetry/instrumentors/telemetry_rail.py` 第 291 行:`self._degraded: bool = False` → 改成 `True`(让 TelemetryRail 所有 hook no-op;rail 是在 `interface_deep` / `subagent_executor` 里独立实例化的,注释 `init_telemetry` 不够,必须把 rail 自身 no-op)。
+原先(单开关时代)为避免双写,要在 jiuwenclaw 工作树改 3 处:
 
-> 注:我们的 instrumentor 在 `jiuwen-instrument` 激活时会先 set OTel provider,旧 `init_telemetry` 的 `set_tracer_provider` 会失败(被覆盖),所以**我们的 exporter 生效**;但旧 rail 仍会产出重复 span,所以才需要 1.3 的 `_degraded=True`。等 jiuwenclaw 正式删除 telemetry 模块后,这三处改动就不需要了。
+- `jiuwenclaw/app_agentserver.py`:`init_telemetry()` → 注释掉。
+- `jiuwenclaw/app_gateway.py`:`init_telemetry()` → 注释掉。
+- `jiuwenclaw/telemetry/instrumentors/telemetry_rail.py`:`self._degraded: bool = False` → 改 `True`(让 TelemetryRail 所有 hook no-op)。
+
+现在仅作为**兜底**:若你确实同时设了 `OTEL_ENABLED=true`(内置开)又想用本探针,才会双写——这时要么关掉 `OTEL_ENABLED`,要么仍按上面三处手动禁用内置。等 jiuwenclaw 正式删除 telemetry 模块后,本探针会改回读 `OTEL_ENABLED`(恢复单开关),此节整体删除。
 
 ### 1.3 修 web 前端一个语法错误(否则聊天 WS hook 崩)
 
@@ -57,8 +59,10 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:5173/src/hooks/useWebS
 
 ### 2.1 环境变量(三个进程共用)
 
+> ⚠️ **enterprise_dev 双开关**:本探针用 `OTEL_INSTRUMENTOR_ENABLED`;`OTEL_ENABLED` 留给 jiuwenclaw 内置 telemetry。**不要设 `OTEL_ENABLED`**,否则内置会和本探针双写(见 1.2)。
+
 ```bash
-export OTEL_ENABLED=true
+export OTEL_INSTRUMENTOR_ENABLED=true          # 本探针总开关(唯一必设项)
 export OTEL_TRACES_EXPORTER=otlp
 export OTEL_METRICS_EXPORTER=otlp
 export OTEL_EXPORTER_OTLP_PROTOCOL=http
@@ -67,6 +71,7 @@ export OTEL_SERVICE_NAME=jiuwenclaw
 export OTEL_LOG_MESSAGES=true   # 记录完整 prompt/response + tool 参数/结果(隐私敏感,生产可关)
 export OTEL_LOGS_EXPORTER=otlp              # 采集 jiuwenclaw stdlib 日志
 export OTEL_LOGS_LEVEL=INFO                 # 采集级别 (DEBUG 会爆量)
+# 可选: export OTEL_MESSAGE_CONTENT_MAX_LENGTH=0   # 关闭消息截断,采完整内容(默认 4096 字符)
 # 可选: export OTEL_LOGS_EXCLUDED_LOGGERS=jiuwenclaw.interface.resp
 ```
 
@@ -138,11 +143,11 @@ agent/LLM/tool 执行期间的日志带 trace_id(挂在 trace 下);网关路由�
 
 ## 4. 常见坑
 
-- **重复 span(每个 gen_ai.chat 出现两次)**:旧 TelemetryRail 没禁干净。确认 1.2 的三处改动都在(尤其 `telemetry_rail.py` 的 `_degraded=True`)。
+- **重复 span(每个 gen_ai.chat 出现两次)**:多半是同时设了 `OTEL_ENABLED=true`(开了 jiuwenclaw 内置 telemetry)和 `OTEL_INSTRUMENTOR_ENABLED=true`(开了本探针)。本探针只认 `OTEL_INSTRUMENTOR_ENABLED`——**不要设 `OTEL_ENABLED`**,内置即 no-op。若仍重复,按 1.2 兜底三处手动禁用内置。
 - **`gen_ai.tool` 嵌在 `gen_ai.chat` 下面**:流式工具执行 + streaming span 持 context 的副作用。已修(streaming 路径用 `start_span` 非当前)。详见 `docs/troubleshooting/streaming-tool-span-parentage.md`。
 - **第一次 LLM 调用没输出**:那是 tool_call 响应(模型决定调工具,无文本)。已修(按 index 累积 tool_call 增量作为输出)。
 - **`jiuwen-instrument jiuwenclaw.app_agentserver` 报 `unrecognized arguments`**:已修(CLI argv 剥离模块名)。确认 instrumentor 是最新版(editable)。
-- **trace 里 scope 不是 `jiuwenswarm_instrumentor`**:那是旧 telemetry 的 span(旧 rail 没 `_degraded=True`)。
+- **trace 里 scope 不是 `jiuwenswarm_instrumentor`**:那是 jiuwenclaw 内置 telemetry 的 span——说明你设了 `OTEL_ENABLED=true` 把内置也开了。本探针只认 `OTEL_INSTRUMENTOR_ENABLED`,**不要设 `OTEL_ENABLED`**(见 1.2)。
 - **labubu Logs 页没数据**:确认 `OTEL_LOGS_EXPORTER=otlp`(默认 `none` 不采);确认 labubu `POST /v1/logs` 可达(`curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:4318/v1/logs` 应 200)。`OTEL_LOGS_LEVEL=DEBUG` 会爆量,默认 INFO。注意 labubu 每 5min 清理无 trace 关联的日志(启动日志 `trace_id=0` 会被清)——5min 内查,或发 chat 消息让日志带 trace_id(被关联保留)。若 agentserver 日志全空而 gateway 有,多半是 filter 复用把路由 filter 也拷了导致记录被拒——详见 `docs/troubleshooting/logs-dropped-by-app-routing-filters.md`。
 - **日志里没 prompt 等敏感字段被脱敏**:正常 —— instrumentor 复用了 jiuwenclaw 自有的 `SensitiveDataFilter`(从 `jiuwenclaw` logger 已有 handler 复制);若 jiuwenclaw 没装 filter,instrumentor 回退到 WARNING-only(不发 INFO)。
 
@@ -150,16 +155,16 @@ agent/LLM/tool 执行期间的日志带 trace_id(挂在 trace 下);网关路由�
 
 非 editable `pip install .` 会在 site-packages 落一个 `jiuwenswarm_instrumentor.pth`,内容是单行 `import jiuwenswarm_instrumentor._autoload`。CPython 在每个 Python 进程启动时执行该行 → `_autoload._autoload()` → `activate()`。gating:
 
-- `OTEL_ENABLED=true` 才真正激活(否则 `_autoload` 立即 return,零开销)。
-- `JIUWENSWARM_INSTRUMENT_AUTOLOAD=false`(`0`/`no`/`off`)显式 opt-out,即使 `OTEL_ENABLED=true` 也不自动激活(改用 CLI/代码激活时用)。
+- `OTEL_INSTRUMENTOR_ENABLED=true` 才真正激活(否则 `_autoload` 立即 return,零开销)。注意这是**探针自己的开关**,与 jiuwenclaw 内置 telemetry 的 `OTEL_ENABLED` 分离——两者不共享,避免双写。
+- `JIUWENSWARM_INSTRUMENT_AUTOLOAD=false`(`0`/`no`/`off`)显式 opt-out,即使 `OTEL_INSTRUMENTOR_ENABLED=true` 也不自动激活(改用 CLI/代码激活时用)。
 - 任何激活异常被吞掉,绝不影响业务进程。
 
-这就是 2.2 一条命令能覆盖 split-process 子进程的原理。不再需要手动往 venv 放 `sitecustomize.py`。editable 安装不发货此 `.pth`,需走 2.3 或自配 `PYTHONPATH`+`sitecustomize.py`(内容同旧版:`os.getenv("OTEL_ENABLED")=="true"` 时 `from jiuwenswarm_instrumentor import setup; setup()`)。
+这就是 2.2 一条命令能覆盖 split-process 子进程的原理。不再需要手动往 venv 放 `sitecustomize.py`。editable 安装不发货此 `.pth`,需走 2.3 或自配 `PYTHONPATH`+`sitecustomize.py`(内容同旧版:`os.getenv("OTEL_INSTRUMENTOR_ENABLED")=="true"` 时 `from jiuwenswarm_instrumentor import setup; setup()`)。
 
 实测验证(在 `.venv_enterprise_dev` 已装非 editable wheel 后):
 
 ```bash
-OTEL_ENABLED=true OTEL_TRACES_EXPORTER=none \
+OTEL_INSTRUMENTOR_ENABLED=true OTEL_TRACES_EXPORTER=none \
 .venv_enterprise_dev/Scripts/python.exe -c "
 from jiuwenswarm_instrumentor.activate import _APPLIED
 from openjiuwen.core.foundation.llm.model_clients.openai_model_client import OpenAIModelClient
@@ -169,4 +174,4 @@ print(_APPLIED, bool(getattr(OpenAIModelClient.invoke,'_jiuwenswarm_wrapped',Fal
 
 ---
 
-> 所有 jiuwenswarm 侧改动(`app_agentserver.py` / `app_gateway.py` / `telemetry_rail.py` / `useWebSocket.ts`)均为 `resume_enterprise_dev` 工作树的**未提交**改动,自行决定保留/提交/回退。instrumentor 侧改动都在 `D:/code/opensource/github/jiuwenswarm-instrumentor` 的 `feat/instrumentor-impl` 分支(已提交,36 tests)。
+> jiuwenswarm 侧原先要改的 `app_agentserver.py` / `app_gateway.py` / `telemetry_rail.py` 在双开关下**不再需要**(不设 `OTEL_ENABLED` 内置即 no-op);`useWebSocket.ts` 的语法修复仍属于 `resume_enterprise_dev` 工作树的**未提交**改动,自行决定保留/提交/回退。instrumentor 侧改动都在 `D:/code/opensource/github/jiuwenswarm-instrumentor` 的 `enterprise_dev` 分支(已提交,145 tests)。
