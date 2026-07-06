@@ -84,7 +84,12 @@ def test_does_not_clobber_existing_shell_var(tmp_path, monkeypatch):
 def test_missing_file_is_silent(tmp_path, monkeypatch):
     """No .env present → no error, no spurious vars."""
     _clean_data_dir_env(monkeypatch)
-    monkeypatch.setenv("JIUWENSWARM_DATA_DIR", str(tmp_path / "absent"))
+    # Point BOTH data dirs at absent dirs so neither the jiuwenswarm primary nor
+    # the ~/.jiuwenclaw fallback loads the user's real .env (which would set
+    # OTEL_ENABLED and break this assertion on a dev machine).
+    absent = str(tmp_path / "absent")
+    monkeypatch.setenv("JIUWENSWARM_DATA_DIR", absent)
+    monkeypatch.setenv("JIUWENCLAW_DATA_DIR", absent)
     monkeypatch.delenv("OTEL_ENABLED", raising=False)
     load_env_for_instrumentor()  # must not raise
     assert os.environ.get("OTEL_ENABLED") is None
